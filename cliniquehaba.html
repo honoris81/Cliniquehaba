@@ -30,6 +30,9 @@ if ('serviceWorker' in navigator) {
 ══════════════════════════════════════════════════════════════════ */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
   getFirestore, doc, getDoc, setDoc, onSnapshot,
   enableIndexedDbPersistence, waitForPendingWrites,
   collection, serverTimestamp
@@ -46,6 +49,25 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
+const auth = getAuth(fbApp);
+
+// Authentification anonyme Firebase — remplace l'ancien "code secret
+// d'établissement" envoyé dans chaque document. Les règles Firestore
+// exigent désormais request.auth != null : un client qui n'a pas ce
+// jeton (obtenu uniquement en chargeant cette appli, ou via une copie
+// de celle-ci) ne peut ni lire ni écrire. Ce n'est toujours pas une
+// authentification nominative (voir CUR_USER/addLog pour la
+// traçabilité par utilisateur côté application), mais ça ferme
+// l'accès public à la base à quiconque tombe sur l'URL du projet.
+let __authReady = new Promise((resolve) => {
+  onAuthStateChanged(auth, (user) => {
+    if (user) { resolve(user); return; }
+    signInAnonymously(auth).catch((err) => {
+      console.error('Connexion anonyme Firebase échouée:', err);
+      resolve(null);
+    });
+  });
+});
 
 // Persistance offline : cache IndexedDB local + queue d'écriture auto.
 // Si plusieurs onglets sont ouverts, un seul peut détenir la persistance ;
@@ -59,21 +81,18 @@ let __persistenceReady = enableIndexedDbPersistence(db).then(
   }
 );
 
-const COLL = 'cgn_store'; // collection Firestore unique clé→valeur (garde le même modèle "un doc = une clé" que l'ancien backend, pour compatibilité totale avec apiGet/apiSet)
+// Prêt seulement quand l'auth ET la persistance ont été tentées.
+let __ready = Promise.all([__authReady, __persistenceReady]);
 
-// Code secret d'établissement — exigé par les règles Firestore pour
-// toute lecture ou écriture (voir firestore.rules). Ce n'est pas un
-// vrai mécanisme d'authentification (il est visible dans le code
-// source), mais il empêche un accès public/anonyme à la base au cas
-// où quelqu'un tomberait sur l'URL du projet Firebase.
-const CLINIC_KEY = "POjedEGcdvjzxootSy2wS0RwiICrrRgz";
+const COLL = 'cgn_store'; // collection Firestore unique clé→valeur (garde le même modèle "un doc = une clé" que l'ancien backend, pour compatibilité totale avec apiGet/apiSet)
 
 // Pont exposé au script principal (non-module) plus bas dans le fichier.
 window.__fb = {
-  ready: __persistenceReady,
+  ready: __ready,
   db,
+  auth,
   async get(key) {
-    await __persistenceReady;
+    await __ready;
     try {
       const snap = await getDoc(doc(db, COLL, key));
       return snap.exists() ? snap.data().value : null;
@@ -83,13 +102,11 @@ window.__fb = {
     }
   },
   async set(key, value) {
-    await __persistenceReady;
+    await __ready;
     try {
       // setDoc résout localement immédiatement même hors-ligne (écriture
       // optimiste dans le cache), puis se synchronise seule au retour réseau.
-      // clinicKey est inclus à plat dans le document pour que les règles
-      // Firestore puissent le vérifier (resource.data.clinicKey / request.resource.data.clinicKey).
-      await setDoc(doc(db, COLL, key), {value, clinicKey: CLINIC_KEY, updatedAt: serverTimestamp()});
+      await setDoc(doc(db, COLL, key), {value, updatedAt: serverTimestamp()});
       return true;
     } catch (e) {
       console.warn('fb.set error', key, e);
@@ -98,10 +115,19 @@ window.__fb = {
   },
   // Écoute en temps réel d'une clé ; callback(value) appelé à chaque
   // changement local (offline) ou distant (autre utilisateur/appareil).
+  // On attend __ready avant de s'abonner : tant que l'auth anonyme
+  // n'est pas établie, Firestore rejetterait l'écoute (règles basées
+  // sur request.auth != null).
   watch(key, callback) {
-    return onSnapshot(doc(db, COLL, key), (snap) => {
-      callback(snap.exists() ? snap.data().value : null, snap.metadata.fromCache);
-    }, (err) => console.warn('fb.watch error', key, err));
+    let unsub = null;
+    let cancelled = false;
+    __ready.then(() => {
+      if (cancelled) return;
+      unsub = onSnapshot(doc(db, COLL, key), (snap) => {
+        callback(snap.exists() ? snap.data().value : null, snap.metadata.fromCache);
+      }, (err) => console.warn('fb.watch error', key, err));
+    });
+    return () => { cancelled = true; if (unsub) unsub(); };
   },
   async flush() {
     try { await waitForPendingWrites(db); return true; } catch { return false; }
@@ -1523,6 +1549,12 @@ let lastSync = null;
    UTILITAIRES
 ══════════════════════════════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
+// Échappement HTML — à utiliser systématiquement autour de toute donnée
+// saisie par un utilisateur (nom, prénom, notes, motif...) avant de
+// l'injecter dans un template innerHTML, pour empêcher le XSS stocké.
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[c]));
 const fmtDate = d => { try { return d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR') : '—'; } catch { return '—'; } };
 const todayStr = () => new Date().toISOString().split('T')[0];
 const fmtGNF = n => (+(n) || 0).toLocaleString('fr-FR') + ' GNF';
@@ -1634,12 +1666,12 @@ function drawDonut(svgId, legendId, data) {
     const x1 = 60 + 44 * Math.cos(startAngle), y1 = 60 + 44 * Math.sin(startAngle);
     const x2 = 60 + 44 * Math.cos(endAngle), y2 = 60 + 44 * Math.sin(endAngle);
     const large = pct > 0.5 ? 1 : 0;
-    paths += `<path d="M60 60 L${x1} ${y1} A44 44 0 ${large} 1 ${x2} ${y2}Z" fill="${d.color}" opacity=".85"><title>${d.label}: ${d.val}</title></path>`;
+    paths += `<path d="M60 60 L${x1} ${y1} A44 44 0 ${large} 1 ${x2} ${y2}Z" fill="${d.color}" opacity=".85"><title>${esc(d.label)}: ${d.val}</title></path>`;
     cum += pct;
   });
   svg.innerHTML = paths + `<circle cx="60" cy="60" r="26" fill="#0D0500"/><text x="60" y="65" text-anchor="middle" fill="#F8C300" font-size="12" font-weight="900" font-family="Cinzel">${total}</text>`;
   const COLS = ['#009A44','#F8C300','#CC0001','#60a5fa','#a78bfa'];
-  legend.innerHTML = filtered.map((d, i) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--br)"><span style="color:${d.color}">● ${d.label}</span><span style="font-weight:800">${d.val} (${Math.round((d.val/total)*100)}%)</span></div>`).join('');
+  legend.innerHTML = filtered.map((d, i) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--br)"><span style="color:${d.color}">● ${esc(d.label)}</span><span style="font-weight:800">${d.val} (${Math.round((d.val/total)*100)}%)</span></div>`).join('');
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1758,7 +1790,7 @@ function renderOnline() {
   if (el3) {
     el3.innerHTML = ONLINE.slice(0, 6).map(u => {
       const ud = USERS.find(uu => uu.id === u.uid) || {};
-      return `<span title="${u.nom} (${u.role})" style="font-size:15px;cursor:default">${ud.icon || '👤'}</span>`;
+      return `<span title="${esc(u.nom)} (${u.role})" style="font-size:15px;cursor:default">${ud.icon || '👤'}</span>`;
     }).join('');
   }
   const cards = $('dash-online-cards');
@@ -1770,7 +1802,7 @@ function renderOnline() {
         const ud = USERS.find(uu => uu.id === u.uid) || {};
         return `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:rgba(255,255,255,.05);border-radius:10px;border:1px solid var(--br)">
           <span style="font-size:15px">${ud.icon || '👤'}</span>
-          <div><div style="font-size:12px;font-weight:700">${u.nom}</div><div style="font-size:10px;color:var(--mu)">${u.role}</div></div>
+          <div><div style="font-size:12px;font-weight:700">${esc(u.nom)}</div><div style="font-size:10px;color:var(--mu)">${u.role}</div></div>
           <div class="sync-dot" style="margin-left:4px"></div>
         </div>`;
       }).join('');
@@ -1894,7 +1926,7 @@ async function saveDB() {
 function initLoginForm() {
   const sel = $('login-user');
   if (!sel) return;
-  sel.innerHTML = USERS.map(u => `<option value="${u.id}">${u.icon} ${u.nom} — ${u.role}</option>`).join('');
+  sel.innerHTML = USERS.map(u => `<option value="${u.id}">${u.icon} ${esc(u.nom)} — ${u.role}</option>`).join('');
   const demo = $('demo-users');
   if (demo) demo.innerHTML = USERS.map(u => `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--br);color:var(--mu)"><span>${u.icon} ${u.nom.split(' ').slice(-1)[0]}</span><span style="font-family:monospace;color:var(--o)">${u.hint}</span></div>`).join('');
 }
@@ -1951,7 +1983,7 @@ async function enterApp(u, showToast) {
   if (c) applyConfig(c);
 
   // Log connexion (ne bloque pas si ça échoue)
-  addLog('connexion', `${u.nom} s'est connecté`).catch(() => {});
+  addLog('connexion', `${esc(u.nom)} s'est connecté`).catch(() => {});
 
   // Construire l'UI et naviguer
   setupUserUI();
@@ -1961,7 +1993,7 @@ async function enterApp(u, showToast) {
   let startSec = 'dashboard';
   try { startSec = localStorage.getItem(LASTSECK) || 'dashboard'; } catch {}
   goSection(startSec);
-  if (showToast) toast(`Bienvenue, ${u.nom} ! ${CFG.emoji}`, '#009A44');
+  if (showToast) toast(`Bienvenue, ${esc(u.nom)} ! ${CFG.emoji}`, '#009A44');
 }
 
 async function tryRestoreSession() {
@@ -1982,7 +2014,7 @@ async function tryRestoreSession() {
 
 async function logout() {
   if (CUR_USER) {
-    addLog('connexion', `${CUR_USER.nom} s'est déconnecté`).catch(() => {});
+    addLog('connexion', `${esc(CUR_USER.nom)} s'est déconnecté`).catch(() => {});
   }
   stopSync();
   ONLINE = [];
@@ -2035,7 +2067,7 @@ function buildNav() {
   if (nav) {
     nav.innerHTML = getNav().map(n => `<button class="nav-btn${CUR_SECTION === n.k ? ' active' : ''}" onclick="goSection('${n.k}')" data-nav="${n.k}">
       <span class="nav-icon">${n.icon}</span>
-      <span class="nav-label">${n.label}</span>
+      <span class="nav-label">${esc(n.label)}</span>
       ${n.k === 'pharmacie' ? '<span class="nav-badge" id="pharm-badge" style="display:none">0</span>' : ''}
     </button>`).join('');
   }
@@ -2050,7 +2082,7 @@ function buildLauncher() {
   grid.innerHTML = items.map(n => `<button class="launcher-btn" onclick="goSection('${n.k}')">
     ${n.k === 'pharmacie' ? '<span class="launcher-badge" id="launcher-pharm-badge" style="display:none">0</span>' : ''}
     <span class="launcher-icon">${n.icon}</span>
-    <span>${n.label}</span>
+    <span>${esc(n.label)}</span>
   </button>`).join('');
 }
 
@@ -2062,7 +2094,7 @@ function buildBnav() {
     <div class="bnav-dot"></div>
     <div class="bnav-bar"></div>
     <div class="bnav-icon">${n.icon}</div>
-    <div class="bnav-lbl">${n.label}</div>
+    <div class="bnav-lbl">${esc(n.label)}</div>
   </button>`).join('');
 }
 
@@ -2207,7 +2239,7 @@ function renderDashboard() {
       const p = patients.find(p => p.id === r.patientId) || {};
       return `<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--br)">
         ${mkAv(p.nom||'X',p.prenom||'X',38,p.photo)}
-        <div style="flex:1"><div style="font-weight:800;font-size:13px">${p.prenom||''} ${p.nom||''}</div><div style="font-size:11px;color:var(--mu)">${r.heure} · ${r.motif}</div></div>
+        <div style="flex:1"><div style="font-weight:800;font-size:13px">${p.prenom||''} ${p.nom||''}</div><div style="font-size:11px;color:var(--mu)">${r.heure} · ${esc(r.motif)}</div></div>
         ${mkBdg(r.statut, r.statut === 'confirmé' ? 'v' : 'o')}
       </div>`;
     }).join('');
@@ -2234,7 +2266,7 @@ function renderDashboard() {
     alertEl.innerHTML = alertes.length === 0
       ? '<p style="color:var(--v);font-weight:700;font-size:13px">✅ Tous les stocks sont OK.</p>'
       : alertes.map(m => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--br)">
-          <div><div style="font-weight:700;font-size:12px">${m.nom}</div><div style="font-size:10px;color:var(--mu)">Stock: ${safeN(m.stock)} / Seuil: ${safeN(m.seuil)}</div></div>
+          <div><div style="font-weight:700;font-size:12px">${esc(m.nom)}</div><div style="font-size:10px;color:var(--mu)">Stock: ${safeN(m.stock)} / Seuil: ${safeN(m.seuil)}</div></div>
           ${mkBdg(stockZero(m) ? 'RUPTURE' : 'Bas', stockZero(m) ? 'r' : 'o')}
         </div>`).join('');
   }
@@ -2252,7 +2284,7 @@ function renderPatients() {
   const sub = $('pat-sub'); if (sub) sub.textContent = DB.patients.length + ' patients · Partagés via Firebase';
   const canE = can(CUR_USER.role, 'patients');
   const btn = $('btn-new-patient'); if (btn) btn.style.display = canE ? '' : 'none';
-  const filtered = DB.patients.filter(p => `${p.nom} ${p.prenom} ${p.region}`.toLowerCase().includes(q));
+  const filtered = DB.patients.filter(p => `${esc(p.nom)} ${esc(p.prenom)} ${esc(p.region)}`.toLowerCase().includes(q));
   const grid = $('pat-grid');
   if (!grid) return;
   if (!filtered.length) { grid.innerHTML = '<p style="color:var(--mu);text-align:center;padding:28px;grid-column:1/-1">Aucun patient trouvé.</p>'; return; }
@@ -2269,10 +2301,10 @@ function renderPatients() {
           ${mkBdg(p.assurance !== 'Aucune' ? '🛡 ' + p.assurance : 'Sans assurance', p.assurance !== 'Aucune' ? 'v' : 'g')}
         </div>
       </div>
-      <div style="font-family:'Cinzel',serif;font-weight:700;font-size:15px">${p.prenom} ${p.nom}</div>
-      <div style="font-size:12px;color:var(--mu);margin-top:2px">📍 ${p.region} · ${p.profession || '—'}</div>
+      <div style="font-family:'Cinzel',serif;font-weight:700;font-size:15px">${esc(p.prenom)} ${esc(p.nom)}</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:2px">📍 ${esc(p.region)} · ${p.profession || '—'}</div>
       <div style="font-size:12px;color:var(--mu)">📞 ${p.tel || '—'}</div>
-      ${p.allergies && p.allergies !== 'Aucune' ? `<div style="margin-top:7px;padding:4px 9px;background:var(--rg);border:1px solid rgba(204,0,1,.4);border-radius:8px;font-size:12px;color:var(--r);font-weight:700">⚠️ Allergie : ${p.allergies}</div>` : ''}
+      ${p.allergies && p.allergies !== 'Aucune' ? `<div style="margin-top:7px;padding:4px 9px;background:var(--rg);border:1px solid rgba(204,0,1,.4);border-radius:8px;font-size:12px;color:var(--r);font-weight:700">⚠️ Allergie : ${esc(p.allergies)}</div>` : ''}
       ${imcBlock}
       <div style="display:flex;gap:6px;margin-top:13px;flex-wrap:wrap">
         <button class="btn o sm" onclick="openHistModal(${p.id})">📋 Historique</button>
@@ -2333,7 +2365,7 @@ async function deletePatient(id) {
   const p = DB.patients.find(p => p.id === id) || {};
   DB.patients = DB.patients.filter(p => p.id !== id);
   await saveDB();
-  await addLog('suppression', `Patient supprimé : ${p.prenom} ${p.nom}`);
+  await addLog('suppression', `Patient supprimé : ${esc(p.prenom)} ${esc(p.nom)}`);
   renderPatients();
 }
 
@@ -2344,8 +2376,8 @@ function openHistModal(id) {
   const hh = $('hist-header');
   if (hh) hh.innerHTML = `${mkAv(p.nom, p.prenom, 52,p.photo)}
     <div>
-      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--o)">${p.prenom} ${p.nom}</div>
-      <div style="font-size:12px;color:var(--mu);margin-top:2px">📍 ${p.region} · ${p.profession || '—'}</div>
+      <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--o)">${esc(p.prenom)} ${esc(p.nom)}</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:2px">📍 ${esc(p.region)} · ${p.profession || '—'}</div>
       <div style="font-size:12px;color:var(--mu)">🩸 ${p.groupe} · 🛡 ${p.assurance}</div>
       ${p.urgence ? `<div style="font-size:11px;color:var(--r);margin-top:2px">🚨 ${p.urgence}</div>` : ''}
     </div>`;
@@ -2355,9 +2387,9 @@ function openHistModal(id) {
       ? '<p style="color:var(--mu)">Aucun historique médical.</p>'
       : p.historique.map(h => `<div style="border-left:4px solid var(--o);padding-left:14px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--br)">
           <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--o);font-size:11px">${fmtDate(h.date)}</div>
-          <div style="font-weight:800;font-size:14px;margin-top:3px">${h.motif}</div>
+          <div style="font-weight:800;font-size:14px;margin-top:3px">${esc(h.motif)}</div>
           <div style="font-size:12px;color:var(--v);margin-top:2px">${h.medecin}</div>
-          <div style="font-size:12px;color:var(--mu);margin-top:4px;line-height:1.6">${h.notes}</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:4px;line-height:1.6">${esc(h.notes)}</div>
         </div>`).join('');
   }
   showModal('modal-hist');
@@ -2394,7 +2426,7 @@ function renderConsults() {
             <div style="font-size:14px;color:var(--r);font-weight:800;margin-top:7px">🦠 ${c.diag}</div>
             ${c.sym ? `<div style="font-size:12px;color:var(--mu);margin-top:3px">Symptômes : ${c.sym}</div>` : ''}
             ${c.trt ? `<div style="font-size:12px;margin-top:2px">💊 Traitement : <strong>${c.trt}</strong></div>` : ''}
-            ${c.notes ? `<div style="font-size:11px;color:var(--mu);margin-top:3px;font-style:italic">📝 ${c.notes}</div>` : ''}
+            ${c.notes ? `<div style="font-size:11px;color:var(--mu);margin-top:3px;font-style:italic">📝 ${esc(c.notes)}</div>` : ''}
             <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">
               ${c.ta ? `<div style="background:rgba(255,255,255,.05);border-radius:7px;padding:4px 9px;text-align:center"><div style="font-size:12px;font-weight:900;color:var(--r)">${c.ta}</div><div style="font-size:9px;color:var(--mu)">TA</div></div>` : ''}
               ${c.temp ? `<div style="background:rgba(255,255,255,.05);border-radius:7px;padding:4px 9px;text-align:center"><div style="font-size:12px;font-weight:900;color:${safeN(c.temp)>38?'var(--r)':'var(--v)'}">${c.temp}°C</div><div style="font-size:9px;color:var(--mu)">Temp.</div></div>` : ''}
@@ -2414,7 +2446,7 @@ function renderConsults() {
 }
 
 function openConsultModal() {
-  $('mc-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${p.prenom} ${p.nom} · ${p.region}</option>`).join('');
+  $('mc-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)} · ${esc(p.region)}</option>`).join('');
   $('mc-medecin').innerHTML = MEDECINS.map(m => `<option>${m}</option>`).join('');
   $('mc-diag').innerHTML = '<option value="">Sélectionner...</option>' + MALADIES.map(m => `<option>${m}</option>`).join('');
   $('mc-mode').innerHTML = MODES_PAY.map(m => `<option>${m}</option>`).join('');
@@ -2438,7 +2470,7 @@ async function saveConsult() {
   };
   DB.consults.unshift(c);
   await saveDB();
-  await addLog('ajout', `Consultation : ${p.prenom} ${p.nom} — ${diag}`);
+  await addLog('ajout', `Consultation : ${esc(p.prenom)} ${esc(p.nom)} — ${diag}`);
   closeModal();
   renderConsults();
 }
@@ -2484,7 +2516,7 @@ function renderCalendrier() {
       <td style="font-family:'Cinzel',serif;font-weight:900;color:var(--r)">${r.heure}</td>
       <td><div style="display:flex;align-items:center;gap:8px">${mkAv(p.nom||'X',p.prenom||'X',28,p.photo)}<span style="font-weight:700;font-size:13px">${p.prenom||''} ${p.nom||''}</span></div></td>
       <td style="font-size:12px;color:var(--mu)">${r.medecin}</td>
-      <td>${r.motif}</td>
+      <td>${esc(r.motif)}</td>
       <td>${mkBdg(r.salle,'g')}</td>
       <td>${mkBdg(r.statut, r.statut === 'confirmé' ? 'v' : 'o')}</td>
       <td><div style="display:flex;gap:5px">
@@ -2495,7 +2527,7 @@ function renderCalendrier() {
 }
 
 function openRdvModal() {
-  $('mr-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${p.prenom} ${p.nom} · ${p.region}</option>`).join('');
+  $('mr-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)} · ${esc(p.region)}</option>`).join('');
   $('mr-medecin').innerHTML = MEDECINS.map(m => `<option>${m}</option>`).join('');
   $('mr-salle').innerHTML = SALLES.map(s => `<option>${s}</option>`).join('');
   $('mr-date').value = todayStr();
@@ -2576,7 +2608,7 @@ function renderVaccins() {
 }
 
 function openVaccModal() {
-  $('mv-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${p.prenom} ${p.nom}</option>`).join('');
+  $('mv-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)}</option>`).join('');
   $('mv-vaccin').innerHTML = VACCINS_L.map(v => `<option>${v}</option>`).join('');
   $('mv-date').value = todayStr();
   $('mv-lot').value = '';
@@ -2660,7 +2692,7 @@ function renderPharmStock() {
     const pct = Math.min(100, seuil > 0 ? (s / (seuil*2)) * 100 : (s > 0 ? 100 : 0));
     const col = bad ? 'var(--r)' : low ? 'var(--o)' : 'var(--v)';
     return `<tr style="background:${bad?'rgba(204,0,1,.07)':low?'rgba(248,195,0,.04)':'transparent'}">
-      <td style="font-weight:800;font-size:12px;max-width:180px"><div style="display:flex;align-items:center;gap:8px">${mkThumb(m.photo,'💊',28)}<span>${m.nom}</span></div></td>
+      <td style="font-weight:800;font-size:12px;max-width:180px"><div style="display:flex;align-items:center;gap:8px">${mkThumb(m.photo,'💊',28)}<span>${esc(m.nom)}</span></div></td>
       <td style="font-size:11px;color:var(--mu)">${m.cat}</td>
       <td>
         <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:900;color:${col}">${s}</div>
@@ -2731,7 +2763,7 @@ async function applyAjust() {
   const newStock = Math.max(0, safeN(m.stock) + q);
   m.stock = newStock;
   await saveDB();
-  await addLog('modif', `Stock ajusté : ${m.nom} → ${newStock}`);
+  await addLog('modif', `Stock ajusté : ${esc(m.nom)} → ${newStock}`);
   closeModal();
   renderPharmStock();
 }
@@ -2763,7 +2795,7 @@ function renderOrdonnances() {
 }
 
 function openOrdModal() {
-  $('mo-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${p.prenom} ${p.nom}</option>`).join('');
+  $('mo-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)}</option>`).join('');
   $('mo-medecin').innerHTML = MEDECINS.map(m => `<option>${m}</option>`).join('');
   ordLines = [{medId:'',qte:1,pos:''}];
   renderOrdLines();
@@ -2778,7 +2810,7 @@ function renderOrdLines() {
   el.innerHTML = ordLines.map((l, i) => `<div style="display:grid;grid-template-columns:3fr 1fr 2fr;gap:7px;margin-bottom:8px">
     <select class="fsel" style="font-size:12px;padding:7px 9px" onchange="ordLines[${i}].medId=+this.value">
       <option value="">Médicament...</option>
-      ${DB.meds.map(m => `<option value="${m.id}"${l.medId===m.id?' selected':''}>${m.nom} (stock:${safeN(m.stock)})</option>`).join('')}
+      ${DB.meds.map(m => `<option value="${m.id}"${l.medId===m.id?' selected':''}>${esc(m.nom)} (stock:${safeN(m.stock)})</option>`).join('')}
     </select>
     <input type="number" value="${l.qte}" min="1" class="finp" style="font-size:12px;padding:7px 8px" onchange="ordLines[${i}].qte=safeN(this.value)||1" placeholder="Qté"/>
     <input value="${l.pos}" class="finp" style="font-size:12px;padding:7px 8px" onchange="ordLines[${i}].pos=this.value" placeholder="Posologie"/>
@@ -2922,7 +2954,7 @@ function renderCertificats() {
 }
 
 function openCertModal() {
-  $('mce-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${p.prenom} ${p.nom}</option>`).join('');
+  $('mce-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients.map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)}</option>`).join('');
   $('mce-type').innerHTML = TYPES_CERT.map(t => `<option>${t}</option>`).join('');
   $('mce-medecin').innerHTML = MEDECINS.map(m => `<option>${m}</option>`).join('');
   $('mce-jours').value = 3;
@@ -3118,7 +3150,7 @@ function printCertificat(id) {
     Je soussigné(e), <strong>${c.medecin}</strong>, exerçant à ${CFG.title},<br/><br/>
     ${corps}
   </div>
-  ${c.motif ? `<div class="motif">Observations : ${c.motif}</div>` : ''}
+  ${c.motif ? `<div class="motif">Observations : ${esc(c.motif)}</div>` : ''}
   <div class="corps" style="margin-top:24px;font-size:13px;color:#666">Certificat établi à la demande de l'intéressé(e) et remis en main propre pour servir et valoir ce que de droit.</div>
   <div class="sign">
     <div class="sign-box" style="text-align:left">
@@ -3520,7 +3552,7 @@ function printCarnetPatient(id) {
         ${c.ta ? `TA: ${c.ta} · ` : ''}${c.temp ? `Temp: ${c.temp}°C · ` : ''}${c.poids ? `Poids: ${c.poids}kg · ` : ''}
         ${safeN(c.paiement) ? fmtGNF(c.paiement) + ' · ' : ''}<span style="color:${c.statut==='payé'?'#009A44':'#CC2244'};font-weight:700">${c.statut||'—'}</span>
       </div>
-      ${c.notes ? `<div style="font-size:11.5px;color:#777;margin-top:4px;font-style:italic">${c.notes}</div>` : ''}
+      ${c.notes ? `<div style="font-size:11.5px;color:#777;margin-top:4px;font-style:italic">${esc(c.notes)}</div>` : ''}
     </div>`).join('') : sectionEmpty('Aucune consultation enregistrée.');
 
   const vaccinsHtml = vaccinsP.length ? `<table><thead><tr><th>Date</th><th>Vaccin</th><th>N° Lot</th><th>Administré par</th><th>Statut</th></tr></thead><tbody>
@@ -3552,7 +3584,7 @@ function printCarnetPatient(id) {
 
   const w = window.open('', '_blank', 'width=880,height=1000');
   w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/>
-  <title>Carnet Patient — ${p.prenom} ${p.nom}</title>
+  <title>Carnet Patient — ${esc(p.prenom)} ${esc(p.nom)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
   ${printLibTags(['html2canvas','jspdf'])}
   <style>
@@ -3597,7 +3629,7 @@ function printCarnetPatient(id) {
       <div style="font-size:12px;color:#666">🩸 ${p.groupe||'—'} · 🛡 ${p.assurance||'—'}${p.urgence?' · 🚨 Contact urgence: '+p.urgence:''}</div>
     </div>
   </div>
-  ${p.allergies && p.allergies !== 'Aucune' ? `<div class="allergy">⚠️ Allergie connue : ${p.allergies}</div>` : ''}
+  ${p.allergies && p.allergies !== 'Aucune' ? `<div class="allergy">⚠️ Allergie connue : ${esc(p.allergies)}</div>` : ''}
 
   <div class="kpi-row" style="margin-top:16px">
     ${kpiCard('🩺','Consultations',consultsP.length,'#CC0001')}
@@ -3671,7 +3703,7 @@ function printCarnetPatient(id) {
   <\/script>
   </body></html>`);
   w.document.close();
-  addLog('export', `Carnet patient consulté : ${p.prenom} ${p.nom}`).catch(() => {});
+  addLog('export', `Carnet patient consulté : ${esc(p.prenom)} ${esc(p.nom)}`).catch(() => {});
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -3718,7 +3750,7 @@ function renderPersonnel() {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
         ${u.photo ? `<img src="${u.photo}" style="width:44px;height:44px;border-radius:12px;object-fit:cover;flex-shrink:0"/>` : `<div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,${rc},${rc}88);display:flex;align-items:center;justify-content:center;font-size:20px">${u.icon||'👤'}</div>`}
         <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:14px">${u.nom}</div>
+          <div style="font-weight:800;font-size:14px">${esc(u.nom)}</div>
           <div style="font-size:11px;font-family:monospace;color:var(--mu)">@${u.id}</div>
         </div>
         ${mkBdg(u.role, u.role==='admin'?'o':'v')}
@@ -3880,7 +3912,7 @@ function renderFacturation() {
             <div style="font-size:11px;color:var(--mu);margin-top:2px">📅 ${fmtDate(f.date)} · 💳 ${f.mode}</div>
             <div style="font-size:11px;color:var(--mu);margin-top:1px">🧾 N° ${String(f.id).slice(-6)} · ${f.lignes.length} prestation(s)</div>
             <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
-              ${f.lignes.slice(0,3).map(l => `<span style="font-size:11px;background:rgba(255,245,200,.07);border:1px solid var(--br);border-radius:7px;padding:2px 8px">${l.label}</span>`).join('')}
+              ${f.lignes.slice(0,3).map(l => `<span style="font-size:11px;background:rgba(255,245,200,.07);border:1px solid var(--br);border-radius:7px;padding:2px 8px">${esc(l.label)}</span>`).join('')}
               ${f.lignes.length > 3 ? `<span style="font-size:11px;color:var(--mu)">+${f.lignes.length-3}</span>` : ''}
             </div>
           </div>
@@ -3907,7 +3939,7 @@ function renderFacturation() {
 function openFactureModal() {
   factLines = [{label:'', qte:1, pu:0}];
   $('mf-patient').innerHTML = '<option value="">Sélectionner...</option>' +
-    DB.patients.map(p => `<option value="${p.id}">${p.prenom} ${p.nom} · ${p.region}</option>`).join('');
+    DB.patients.map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)} · ${esc(p.region)}</option>`).join('');
   $('mf-mode').innerHTML = MODES_PAY.map(m => `<option>${m}</option>`).join('');
   $('mf-consult').innerHTML = '<option value="">Aucune (saisie libre)</option>';
   $('mf-remise').value = '0';
@@ -4039,7 +4071,7 @@ function printRecu(id) {
   const isPaye = f.statut === 'payé';
   const lignesHTML = f.lignes.map(l => `
     <tr>
-      <td style="padding:7px 10px;border-bottom:1px solid #e5e5e5;font-size:13px">${l.label}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e5e5e5;font-size:13px">${esc(l.label)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #e5e5e5;text-align:center;font-size:13px">${safeN(l.qte)}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #e5e5e5;text-align:right;font-size:13px">${safeN(l.pu).toLocaleString('fr-FR')}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #e5e5e5;text-align:right;font-size:13px;font-weight:700">${(safeN(l.qte)*safeN(l.pu)).toLocaleString('fr-FR')}</td>
@@ -4247,7 +4279,7 @@ async function confirmOpenCaisse() {
   };
   DB.caisseSessions.unshift(session);
   await saveDB();
-  await addLog('ajout', `Caisse ouverte par ${CUR_USER.nom} — fonds initial ${solde.toLocaleString('fr-FR')} GNF`);
+  await addLog('ajout', `Caisse ouverte par ${esc(CUR_USER.nom)} — fonds initial ${solde.toLocaleString('fr-FR')} GNF`);
   closeModal();
   renderCaisse();
   toast('🔓 Caisse ouverte', '#009A44');
@@ -4325,7 +4357,7 @@ async function confirmCloseCaisse() {
   session.ecart = reel - theorique;
   session.fermeePar = CUR_USER.nom;
   await saveDB();
-  await addLog('ajout', `Caisse fermée par ${CUR_USER.nom} — théorique ${theorique.toLocaleString('fr-FR')} / réel ${reel.toLocaleString('fr-FR')} GNF (écart ${session.ecart.toLocaleString('fr-FR')})`);
+  await addLog('ajout', `Caisse fermée par ${esc(CUR_USER.nom)} — théorique ${theorique.toLocaleString('fr-FR')} / réel ${reel.toLocaleString('fr-FR')} GNF (écart ${session.ecart.toLocaleString('fr-FR')})`);
   closeModal();
   renderCaisse();
   toast(session.ecart === 0 ? '✅ Caisse fermée sans écart' : '⚠️ Caisse fermée avec écart', session.ecart === 0 ? '#009A44' : '#C49800');
