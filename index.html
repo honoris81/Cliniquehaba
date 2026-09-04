@@ -65,6 +65,12 @@ let __authReady = new Promise((resolve) => {
     if (user) { resolve(user); return; }
     signInAnonymously(auth).catch((err) => {
       console.error('Connexion anonyme Firebase échouée:', err);
+      // Rendu visible côté script principal (voir showFbAuthError plus
+      // bas) : sans ça, un échec d'auth anonyme (ex: méthode "Anonyme"
+      // désactivée dans la console Firebase) fait échouer TOUS les
+      // enregistrements en silence — l'utilisateur croit que l'app est
+      // cassée ou "hardcodée" alors que c'est juste ce point précis.
+      window.__fbAuthError = err && err.code ? err.code : 'unknown';
       resolve(null);
     });
   });
@@ -2165,6 +2171,19 @@ async function enterApp(u, showToast) {
   // Charger données : Firestore (cache offline inclus) → sinon backup
   // localStorage → sinon données de démo initiales.
   let d = await apiGet(SK);
+  // À ce stade, la tentative de connexion anonyme Firebase (voir le
+  // module en tête de fichier) a eu le temps d'aboutir ou d'échouer.
+  // Si elle a échoué, TOUT enregistrement (patients, factures...) va
+  // échouer en silence ensuite : on prévient clairement plutôt que de
+  // laisser croire à un bug de l'application.
+  if (window.__fbAuthError) {
+    alert(
+      "⚠️ Connexion au serveur impossible (code: " + window.__fbAuthError + ").\n\n" +
+      "Rien ne pourra être enregistré tant que ce problème n'est pas résolu. " +
+      "Causes fréquentes : l'authentification \"Anonyme\" n'est pas activée dans la console Firebase du projet, ou une restriction réseau bloque Firebase.\n\n" +
+      "Contactez l'administrateur technique de l'application."
+    );
+  }
   if (!d) {
     try { const b = localStorage.getItem(LOCAL_DB_BACKUP); if (b) d = JSON.parse(b); } catch {}
   }
