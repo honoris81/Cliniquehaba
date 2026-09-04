@@ -1891,12 +1891,119 @@ function renderOnline() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   SYNC
+   FUSION MULTI-POSTE
+   Problème résolu : sans ceci, syncAll() remplaçait tout l'objet DB
+   local par celui de Firestore (« DB = d »). Si deux postes travaillent
+   en parallèle (ex. réception + pharmacie), le dernier saveDB() gagnait
+   et écrasait silencieusement les changements de l'autre poste.
+   Solution : chaque collection de DB (patients, factures, meds, ...)
+   est un tableau d'objets avec un « id ». On fusionne distant + local
+   élément par élément au lieu d'écraser le tableau entier :
+   - un id présent des deux côtés → on garde la version la plus
+     récente (comparée via son propre champ _t, posé à chaque
+     modification par touchRev()) ;
+   - un id présent seulement en local (créé hors-ligne, pas encore
+     poussé) → conservé ;
+   - un id présent seulement à distance (créé par l'autre poste) →
+     récupéré.
+   Rien n'est donc perdu même si deux postes modifient des choses
+   différentes entre deux synchronisations.
 ══════════════════════════════════════════════════════════════════ */
+const DB_COLLECTIONS = ['patients','rdv','meds','ordonnances','consults','vaccins','factures','certificats','caisseSessions','caisseMouvements'];
+
+// Registre des suppressions récentes : { "collection:id": timestamp }.
+// Nécessaire car mergeCollection() est additif par id (il récupère tout
+// ce qui manque en local) — sans ce registre, supprimer un patient sur
+// un poste referait réapparaître ce patient au prochain sync si un
+// autre poste (ou le cache Firestore) le renvoie encore. On garde une
+// fenêtre glissante de 24h, largement suffisante pour couvrir le délai
+// de propagation entre postes.
+const DELETED_REGISTRY_KEY = 'cgn_deleted_registry_v1';
+let DELETED_REGISTRY = {};
+try { DELETED_REGISTRY = JSON.parse(localStorage.getItem(DELETED_REGISTRY_KEY) || '{}'); } catch {}
+
+function markDeleted(collection, id) {
+  DELETED_REGISTRY[`${collection}:${id}`] = Date.now();
+  try { localStorage.setItem(DELETED_REGISTRY_KEY, JSON.stringify(DELETED_REGISTRY)); } catch {}
+}
+
+function isRecentlyDeleted(collection, id) {
+  const t = DELETED_REGISTRY[`${collection}:${id}`];
+  if (!t) return false;
+  if (Date.now() - t > 24*3600*1000) { delete DELETED_REGISTRY[`${collection}:${id}`]; return false; }
+  return true;
+}
+
+// À appeler juste avant de pousser une modification dans une collection
+// de DB (pas strictement nécessaire : saveDB() horodate aussi tout au
+// moment de sauvegarder — voir stampDB()). Gardé pour un marquage plus
+// précis si besoin ponctuel.
+function touchRev(obj) { obj._t = Date.now(); return obj; }
+
+// Marque comme "modifiés maintenant" les enregistrements dont le
+// contenu a réellement changé depuis la dernière sauvegarde connue
+// (LAST_SAVED_SNAPSHOT). C'est ce qui rend le merge utile : seul ce
+// qu'on vient vraiment de modifier doit l'emporter sur la version d'un
+// autre poste ; horodater tout le tableau à chaque save rendrait la
+// comparaison inutile (tout aurait toujours le timestamp le plus
+// récent, quel que soit le poste).
+let LAST_SAVED_SNAPSHOT = null;
+
+function stampDB(db) {
+  const now = Date.now();
+  const prev = LAST_SAVED_SNAPSHOT;
+  DB_COLLECTIONS.forEach(key => {
+    const prevById = new Map((prev && prev[key] || []).map(it => [it.id, it]));
+    (db[key] || []).forEach(item => {
+      const before = prevById.get(item.id);
+      const { _t, ...rest } = item;
+      const beforeRest = before ? (({ _t, ...r }) => r)(before) : null;
+      if (!before || JSON.stringify(beforeRest) !== JSON.stringify(rest)) {
+        item._t = now;
+      }
+    });
+  });
+  return db;
+}
+
+function mergeCollection(local = [], remote = [], collectionName = '') {
+  const byId = new Map();
+  local.forEach(item => byId.set(item.id, item));
+  remote.forEach(item => {
+    if (isRecentlyDeleted(collectionName, item.id)) return; // supprimé ici récemment, on l'ignore
+    const existing = byId.get(item.id);
+    if (!existing) { byId.set(item.id, item); return; }
+    // Garde le plus récent (par _t si présent, sinon on suppose que le
+    // distant — déjà confirmé par un autre poste — l'emporte à égalité).
+    const tLocal = existing._t || 0, tRemote = item._t || 0;
+    if (tRemote >= tLocal) byId.set(item.id, item);
+  });
+  return Array.from(byId.values());
+}
+
+function mergeDB(local, remote) {
+  if (!local) return remote;
+  if (!remote) return local;
+  const merged = {...local};
+  DB_COLLECTIONS.forEach(key => {
+    merged[key] = mergeCollection(local[key] || [], remote[key] || [], key);
+  });
+  return merged;
+}
+
 async function syncAll() {
-  // Données
+  // Données — fusion (voir mergeDB) au lieu d'un remplacement complet,
+  // pour ne jamais perdre les modifications d'un autre poste ni les
+  // nôtres pas encore synchronisées.
   const d = await apiGet(SK);
-  if (d) DB = d;
+  if (d) {
+    DB = mergeDB(DB, d);
+    // Nouvelle base de comparaison pour le prochain saveDB() (voir
+    // stampDB) : ce qu'on vient de recevoir/fusionner n'est pas une
+    // "modification locale", donc on ne veut pas le re-marquer comme
+    // tel au prochain enregistrement.
+    LAST_SAVED_SNAPSHOT = JSON.parse(JSON.stringify(DB));
+  }
   // Activité
   const a = await apiGet(AK);
   if (a) ACT = a;
@@ -1996,8 +2103,21 @@ function stopSync() {
 const LOCAL_DB_BACKUP = 'cgn_local_backup_v1';
 
 async function saveDB() {
+  // Horodate les enregistrements réellement modifiés depuis le dernier
+  // save (voir stampDB) — nécessaire pour que la fusion multi-poste
+  // (mergeDB) sache lequel, entre local et distant, est le plus récent.
+  stampDB(DB);
   try { localStorage.setItem(LOCAL_DB_BACKUP, JSON.stringify(DB)); } catch {}
+  // Avant d'écrire, on récupère l'état distant le plus récent et on
+  // fusionne avec le nôtre (voir mergeDB) : si un autre poste a
+  // sauvegardé entre-temps, ses changements sont préservés au lieu
+  // d'être écrasés par notre écriture.
+  if (NET_ONLINE) {
+    const remote = await apiGet(SK);
+    if (remote) DB = mergeDB(DB, remote);
+  }
   await apiSet(SK, DB);
+  LAST_SAVED_SNAPSHOT = JSON.parse(JSON.stringify(DB));
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2055,6 +2175,9 @@ async function enterApp(u, showToast) {
   if (!DB.signatures) DB.signatures = {};
   if (!DB.caisseSessions) DB.caisseSessions = [];
   if (!DB.caisseMouvements) DB.caisseMouvements = [];
+  // Point de départ pour détecter les modifications réelles lors du
+  // prochain saveDB() (voir stampDB / mergeDB).
+  LAST_SAVED_SNAPSHOT = JSON.parse(JSON.stringify(DB));
 
   const a = await apiGet(AK);
   ACT = a || [];
@@ -2443,6 +2566,7 @@ async function savePatient() {
 async function deletePatient(id) {
   if (!confirm('Supprimer ce patient ?')) return;
   const p = DB.patients.find(p => p.id === id) || {};
+  markDeleted('patients', id);
   DB.patients = DB.patients.filter(p => p.id !== id);
   await saveDB();
   await addLog('suppression', `Patient supprimé : ${esc(p.prenom)} ${esc(p.nom)}`);
@@ -2640,6 +2764,7 @@ async function toggleRdv(id) {
 
 async function deleteRdv(id) {
   if (!confirm('Supprimer ce RDV ?')) return;
+  markDeleted('rdv', id);
   DB.rdv = DB.rdv.filter(r => r.id !== id);
   await saveDB();
   await addLog('suppression', 'RDV supprimé');
@@ -2722,6 +2847,7 @@ async function marquerVacc(id) {
 
 async function deleteVacc(id) {
   if (!confirm('Supprimer cette vaccination ?')) return;
+  markDeleted('vaccins', id);
   DB.vaccins = DB.vaccins.filter(v => v.id !== id);
   await saveDB();
   renderVaccins();
@@ -3168,6 +3294,7 @@ async function saveCert() {
 
 async function deleteCert(id) {
   if (!confirm('Supprimer ce certificat ?')) return;
+  markDeleted('certificats', id);
   DB.certificats = DB.certificats.filter(c => c.id !== id);
   await saveDB();
   await addLog('suppression', 'Certificat supprimé');
@@ -4274,6 +4401,7 @@ async function marquerFactPayee(id) {
 
 async function deleteFacture(id) {
   if (!confirm('Supprimer cette facture ?')) return;
+  markDeleted('factures', id);
   DB.factures = DB.factures.filter(f => f.id !== id);
   await saveDB();
   renderFacturation();
@@ -4397,10 +4525,14 @@ function calcSoldeSession(session) {
   return {entrees, sorties, theorique: safeN(session.soldeOuverture) + entrees - sorties};
 }
 
-/* Enregistre automatiquement un encaissement de facture dans la session de caisse ouverte, s'il y en a une */
+/* Enregistre automatiquement un encaissement de facture dans la session de caisse ouverte, s'il y en a une.
+   Idempotent : si un mouvement lié à cette facture existe déjà, on ne
+   le recrée pas (évite un double encaissement en cas de double appel). */
 async function enregistrerEncaissementFacture(f, p) {
-  const session = getSessionOuverte();
   if (!DB.caisseMouvements) DB.caisseMouvements = [];
+  const dejaEncaisse = DB.caisseMouvements.some(m => m.factureId === f.id);
+  if (dejaEncaisse) return;
+  const session = getSessionOuverte();
   DB.caisseMouvements.unshift({
     id: Date.now() + Math.floor(Math.random()*1000),
     sessionId: session ? session.id : null,
