@@ -13,12 +13,11 @@
    sont gérées par la persistance offline native de Firestore.
 ══════════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'clinique-haba-v2';
+const CACHE_NAME = 'clinique-haba-v3';
 
 // Fichiers/URLs à mettre en cache dès l'installation du Service Worker.
 const PRECACHE_URLS = [
   './',
-  './cliniquehaba.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -70,7 +69,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const isAppShell = req.mode === 'navigate' || req.url.endsWith('cliniquehaba.html');
+  const isAppShell = req.mode === 'navigate' || req.url.endsWith('/') || req.url.endsWith('/cliniquehaba.html');
 
   if (isAppShell) {
     // Network-first pour la page principale : on veut la dernière
@@ -81,7 +80,7 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
         return res;
       }).catch(() =>
-        caches.match(req).then((cached) => cached || caches.match('./cliniquehaba.html'))
+        caches.match(req).then((cached) => cached || caches.match('./'))
       )
     );
     return;

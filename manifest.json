@@ -2,7 +2,7 @@
   "name": "Clinique Haba — Système de Gestion",
   "short_name": "Clinique Haba",
   "description": "Système de gestion clinique — fonctionne hors-ligne",
-  "start_url": "./cliniquehaba.html",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#0b0f14",
   "theme_color": "#0b0f14",
