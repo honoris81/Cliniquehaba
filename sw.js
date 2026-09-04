@@ -13,14 +13,20 @@
    sont gérées par la persistance offline native de Firestore.
 ══════════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'clinique-haba-v1';
+const CACHE_NAME = 'clinique-haba-v2';
 
 // Fichiers/URLs à mettre en cache dès l'installation du Service Worker.
 const PRECACHE_URLS = [
   './',
   './cliniquehaba.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png',
   'https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Nunito:wght@400;600;700;800;900&display=swap',
   'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js',
+  'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
