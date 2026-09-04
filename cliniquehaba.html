@@ -4,7 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Clinique Haba</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏥</text></svg>"/>
+<link rel="icon" type="image/png" href="./icon-192.png"/>
+<link rel="apple-touch-icon" href="./icon-192.png"/>
 <link rel="manifest" href="./manifest.json"/>
 <meta name="theme-color" content="#0b0f14"/>
 <script>
@@ -376,6 +377,19 @@ nav{flex:1;padding:8px 10px;overflow-y:auto}
   transition:all .2s;box-shadow:0 1px 0 var(--glass-highlight) inset;
 }
 #menu-btn:hover{background:var(--gold-dim);transform:scale(1.05)}
+#topbar-logout-btn{
+  background:var(--glass-1);border:1px solid var(--glass-border);
+  border-radius:10px;padding:7px 11px;cursor:pointer;font-size:15px;color:var(--txt-3);
+  transition:all .2s;box-shadow:0 1px 0 var(--glass-highlight) inset;flex-shrink:0;
+}
+#topbar-logout-btn:hover{color:var(--r);background:var(--rg);transform:scale(1.05)}
+#topbar-install-btn{
+  background:var(--glass-1);border:1px solid var(--glass-border);
+  border-radius:10px;padding:7px 11px;cursor:pointer;font-size:15px;color:var(--txt-3);
+  transition:all .2s;box-shadow:0 1px 0 var(--glass-highlight) inset;flex-shrink:0;
+  display:none;
+}
+#topbar-install-btn:hover{color:#009A44;background:rgba(0,154,68,.12);transform:scale(1.05)}
 #back-home-btn{
   background:var(--glass-1);border:1px solid var(--glass-border);
   border-radius:10px;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:800;
@@ -765,6 +779,8 @@ tr:last-child td{border-bottom:none}
       <div id="topbar-title">🏠 Accueil</div>
       <div class="topbar-stats" id="topbar-stats"></div>
       <div class="role-pill" id="role-pill" style="display:none"></div>
+      <button id="topbar-install-btn" onclick="installPWA()" title="Installer l'application">📲</button>
+      <button id="topbar-logout-btn" onclick="logout()" title="Déconnexion">🚪</button>
     </div>
     <div id="content">
 
@@ -902,13 +918,18 @@ tr:last-child td{border-bottom:none}
           <button class="btn o" onclick="printRapportAvance()">🖨️ Rapport avancé</button>
         </div>
         <div class="gc">
-          <div style="font-family:'Cinzel',serif;color:var(--o);font-size:13px;font-weight:700;margin-bottom:12px">📁 Export CSV</div>
+          <div style="font-family:'Cinzel',serif;color:var(--o);font-size:13px;font-weight:700;margin-bottom:12px">📁 Export CSV / PDF</div>
           <div style="display:flex;gap:9px;flex-wrap:wrap">
-            <button class="btn g sm" onclick="exportRapport('patients')">👥 Patients</button>
-            <button class="btn g sm" onclick="exportRapport('consultations')">🩺 Consultations</button>
-            <button class="btn g sm" onclick="exportRapport('factures')">🧾 Factures</button>
-            <button class="btn g sm" onclick="exportRapport('stock')">💊 Stock Pharmacie</button>
-            <button class="btn g sm" onclick="exportRapport('rdv')">📅 Rendez-vous</button>
+            <button class="btn g sm" onclick="exportRapport('patients')">👥 Patients CSV</button>
+            <button class="btn o sm" onclick="printListeRapport('patients')">👥 Patients PDF</button>
+            <button class="btn g sm" onclick="exportRapport('consultations')">🩺 Consultations CSV</button>
+            <button class="btn o sm" onclick="printListeRapport('consultations')">🩺 Consultations PDF</button>
+            <button class="btn g sm" onclick="exportRapport('factures')">🧾 Factures CSV</button>
+            <button class="btn o sm" onclick="printListeRapport('factures')">🧾 Factures PDF</button>
+            <button class="btn g sm" onclick="exportRapport('stock')">💊 Stock Pharmacie CSV</button>
+            <button class="btn o sm" onclick="printListeRapport('stock')">💊 Stock Pharmacie PDF</button>
+            <button class="btn g sm" onclick="exportRapport('rdv')">📅 Rendez-vous CSV</button>
+            <button class="btn o sm" onclick="printListeRapport('rdv')">📅 Rendez-vous PDF</button>
           </div>
         </div>
         <div class="ga" id="rapp-kpis"></div>
@@ -1410,6 +1431,65 @@ async function apiSet(key, data) {
 let NET_ONLINE = navigator.onLine;
 window.addEventListener('online', () => { NET_ONLINE = true; updateSyncBar(); syncAll(); });
 window.addEventListener('offline', () => { NET_ONLINE = false; updateSyncBar(); });
+
+/* ══════════════════════════════════════════════════════════════════
+   INSTALLATION PWA (Ajouter à l'écran d'accueil)
+   Chrome/Edge/Android déclenchent 'beforeinstallprompt' quand l'app
+   est installable ; on empêche la mini-infobar automatique et on
+   affiche notre propre bouton, qui déclenche l'invite native au clic.
+   Sur iOS/Safari, cet événement n'existe pas : on affiche à la place
+   une courte instruction (Partager → Sur l'écran d'accueil).
+══════════════════════════════════════════════════════════════════ */
+let DEFERRED_INSTALL_PROMPT = null;
+
+function isStandaloneMode() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true; // iOS
+}
+
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function updateInstallBtn() {
+  const btn = $('topbar-install-btn');
+  if (!btn) return;
+  if (isStandaloneMode()) { btn.style.display = 'none'; return; }
+  // Affiché si Chrome/Edge a fourni l'invite, OU sur iOS (où on montre
+  // l'instruction manuelle à la place, faute d'API d'installation).
+  btn.style.display = (DEFERRED_INSTALL_PROMPT || isIOS()) ? 'inline-block' : 'none';
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  DEFERRED_INSTALL_PROMPT = e;
+  updateInstallBtn();
+});
+
+window.addEventListener('appinstalled', () => {
+  DEFERRED_INSTALL_PROMPT = null;
+  updateInstallBtn();
+  toast('✅ Application installée', '#009A44');
+  addLog('système', 'Application installée sur l\'appareil').catch(() => {});
+});
+
+async function installPWA() {
+  if (DEFERRED_INSTALL_PROMPT) {
+    DEFERRED_INSTALL_PROMPT.prompt();
+    const { outcome } = await DEFERRED_INSTALL_PROMPT.userChoice;
+    DEFERRED_INSTALL_PROMPT = null;
+    updateInstallBtn();
+    if (outcome !== 'accepted') toast('Installation annulée', '#F8C300');
+    return;
+  }
+  if (isIOS()) {
+    toast('📲 Safari : appuyez sur Partager, puis "Sur l\'écran d\'accueil"', '#009A44');
+    return;
+  }
+  toast('Installation non disponible sur ce navigateur', '#F8C300');
+}
+
+window.addEventListener('load', updateInstallBtn);
 
 /* Keys */
 const SK = 'cgn_data_v2';
@@ -3278,6 +3358,126 @@ function exportRapport(type) {
   downloadCSV(filename, toCSV(rows, headers));
   addLog('export', `Export CSV : ${filename}`).catch(() => {});
   toast('📁 Export CSV téléchargé', '#009A44');
+}
+
+// Config par type de liste : titre affiché, icône, colonnes (mêmes
+// données que exportRapport, réutilisées pour rester cohérent entre
+// CSV et PDF/impression).
+const RAPPORT_LISTES = {
+  patients: { titre: 'Liste des Patients', icon: '👥',
+    cols: ['Nom','Prénom','Date de naissance','Téléphone','Région','Groupe sanguin','Assurance','Profession'],
+    rows: DB => DB.patients.map(p => [p.nom,p.prenom,fmtDate(p.ddn),p.tel,p.region,p.groupe,p.assurance,p.profession]) },
+  consultations: { titre: 'Liste des Consultations', icon: '🩺',
+    cols: ['Date','Patient','Médecin','Diagnostic','Montant GNF','Mode','Statut'],
+    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+      return DB.consults.map(c => [fmtDate(c.date),nomP(c.patientId),c.medecin,c.diag,safeN(c.paiement).toLocaleString('fr-FR'),c.mode,c.statut]); } },
+  factures: { titre: 'Liste des Factures', icon: '🧾',
+    cols: ['Date','Patient','Mode','Statut','Total TTC GNF'],
+    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+      return (DB.factures||[]).map(f => [fmtDate(f.date),nomP(f.patientId),f.mode,f.statut,safeN(f.ttc).toLocaleString('fr-FR')]); } },
+  stock: { titre: 'Stock Pharmacie', icon: '💊',
+    cols: ['Médicament','Catégorie','Stock','Seuil alerte','Prix GNF','Fournisseur','Unité'],
+    rows: DB => DB.meds.map(m => [m.nom,m.cat,safeN(m.stock),safeN(m.seuil),safeN(m.prix).toLocaleString('fr-FR'),m.four,m.unite]) },
+  rdv: { titre: 'Liste des Rendez-vous', icon: '📅',
+    cols: ['Date','Heure','Patient','Médecin','Motif','Salle','Statut'],
+    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+      return DB.rdv.map(r => [fmtDate(r.date),r.heure,nomP(r.patientId),r.medecin,r.motif,r.salle,r.statut]); } }
+};
+
+// Version imprimable / PDF d'une des 5 listes ci-dessus. Réutilise le
+// même moteur (fenêtre séparée + html2canvas/jsPDF) que printRapportAvance,
+// pour une mise en page et un rendu PDF cohérents entre les rapports.
+function printListeRapport(type) {
+  if (!DB) return;
+  const cfg = RAPPORT_LISTES[type];
+  if (!cfg) return;
+  const rows = cfg.rows(DB);
+  const now = new Date();
+  const periode = `Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+
+  const theadHtml = `<tr>${cfg.cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr>`;
+  const tbodyHtml = rows.length
+    ? rows.map(r => `<tr>${r.map(v => `<td>${esc(v ?? '—')}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${cfg.cols.length}" style="text-align:center;color:#999">Aucune donnée</td></tr>`;
+
+  const w = window.open('', '_blank', 'width=880,height=1000');
+  w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/>
+  <title>${esc(cfg.titre)} — ${esc(CFG.title)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  ${printLibTags(['html2canvas','jspdf'])}
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Nunito',sans-serif;color:#1a0800;background:#fff;padding:36px;max-width:1000px;margin:0 auto}
+    .header{text-align:center;border-bottom:3px solid #CC0001;padding-bottom:16px;margin-bottom:22px}
+    .logo{font-family:'Cinzel',serif;font-size:24px;font-weight:900;color:#CC0001}
+    .flag{display:flex;height:5px;border-radius:4px;overflow:hidden;width:120px;margin:8px auto 0}
+    .fr{flex:1;background:#CC0001}.fo{flex:1;background:#F8C300}.fv{flex:1;background:#009A44}
+    .title{font-family:'Cinzel',serif;font-size:19px;font-weight:900;color:#CC0001;text-align:center;text-transform:uppercase;letter-spacing:1px;margin:20px 0 4px}
+    .meta{text-align:center;font-size:11px;color:#888;margin-bottom:22px}
+    table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}
+    th{background:#f4f1eb;text-align:left;padding:7px 10px;font-size:10px;text-transform:uppercase;color:#777;font-weight:800}
+    td{padding:7px 10px;border-bottom:1px solid #eee}
+    tr:nth-child(even) td{background:#fafafa}
+    .footer{margin-top:32px;padding-top:14px;border-top:1px solid #e5e5e5;text-align:center;font-size:11px;color:#888}
+    .actions{display:flex;gap:10px;justify-content:center;margin-top:20px}
+    #pdf-status{font-size:11px;color:#888;margin-top:8px;text-align:center}
+    @media print{body{padding:12px}.actions,#pdf-status{display:none!important}}
+  </style></head><body>
+  <div id="rapport-content">
+  <div class="header">
+    <div class="logo">${esc(CFG.emoji)} ${esc(CFG.title)}</div>
+    <div class="flag"><div class="fr"></div><div class="fo"></div><div class="fv"></div></div>
+    <div style="font-size:11px;color:#888;margin-top:6px">${esc(CFG.sub)} · ${esc(CFG.country)}</div>
+  </div>
+  <div class="title">${cfg.icon} ${esc(cfg.titre)}</div>
+  <div class="meta">${periode} · ${rows.length} enregistrement(s)</div>
+  <table><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>
+  <div class="footer">
+    <p>${esc(CFG.title)} — ${esc(CFG.country)}</p>
+    <p style="margin-top:4px">Rapport généré automatiquement · ${now.toLocaleString('fr-FR')}</p>
+  </div>
+  </div>
+  <div class="actions">
+    <button onclick="window.print()" style="padding:8px 22px;background:#CC0001;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif">🖨️ Imprimer</button>
+    <button id="btn-pdf" onclick="telechargerPDF()" style="padding:8px 22px;background:#009A44;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif">📄 Télécharger PDF</button>
+  </div>
+  <div id="pdf-status"></div>
+  <script>
+    async function telechargerPDF() {
+      const btn = document.getElementById('btn-pdf');
+      const status = document.getElementById('pdf-status');
+      const el = document.getElementById('rapport-content');
+      btn.disabled = true; btn.textContent = '⏳ Génération...';
+      status.textContent = 'Génération du PDF en cours, veuillez patienter...';
+      try {
+        const canvas = await html2canvas(el, {scale: 2, backgroundColor: '#ffffff', useCORS: true});
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageW = 210, pageH = 297;
+        const imgW = pageW;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        let heightLeft = imgH, position = 0;
+        pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+        while (heightLeft > 0) {
+          position = heightLeft - imgH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+          heightLeft -= pageH;
+        }
+        pdf.save('${type}_' + new Date().toISOString().slice(0,10) + '.pdf');
+        status.textContent = '✅ PDF téléchargé avec succès.';
+      } catch (e) {
+        status.textContent = '❌ Erreur lors de la génération du PDF : ' + e.message;
+      } finally {
+        btn.disabled = false; btn.textContent = '📄 Télécharger PDF';
+      }
+    }
+  <\/script>
+  </body></html>`);
+  w.document.close();
+  addLog('export', `Rapport imprimé/généré : ${cfg.titre}`).catch(() => {});
 }
 
 /* ══════════════════════════════════════════════════════════════════
