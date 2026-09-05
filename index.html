@@ -2046,6 +2046,27 @@ function mergeDB(local, remote) {
   return merged;
 }
 
+// Même logique appliquée à USERS (personnel). USERS a sa propre clé
+// Firestore (UK) et son propre apiSet, indépendant de DB — sans ceci,
+// deux admins modifiant le personnel en même temps verraient le
+// dernier apiSet(UK, ...) écraser complètement les changements de
+// l'autre (ex: un admin ajoute un membre pendant qu'un autre modifie
+// un mot de passe → l'un des deux changements disparaît en silence).
+function mergeUsers(local = [], remote = []) {
+  return mergeCollection(local, remote, 'users');
+}
+
+// Équivalent de saveDB() pour USERS : relit l'état distant et fusionne
+// avant d'écrire, pour ne jamais écraser un changement fait par un
+// autre poste entre-temps (voir mergeUsers).
+async function saveUsers() {
+  if (NET_ONLINE) {
+    const remote = await apiGet(UK);
+    if (remote) USERS = mergeUsers(USERS, remote);
+  }
+  await apiSet(UK, USERS);
+}
+
 async function syncAll() {
   // Données — fusion (voir mergeDB) au lieu d'un remplacement complet,
   // pour ne jamais perdre les modifications d'un autre poste ni les
@@ -4241,10 +4262,11 @@ async function saveStaff() {
     u.nom = nom; u.role = role; u.icon = icon; u.photo = staffPhotoData;
     u.hint = `${u.id} / ****`;
     if (mdpHash) u.mdpHash = mdpHash;
+    u._t = Date.now();
   } else {
-    USERS.push({id, nom, role, icon, photo: staffPhotoData, mdpHash, hint: `${id} / ****`});
+    USERS.push({id, nom, role, icon, photo: staffPhotoData, mdpHash, hint: `${id} / ****`, _t: Date.now()});
   }
-  await apiSet(UK, USERS);
+  await saveUsers();
   await addLog(editStaffId ? 'modif' : 'ajout', `Personnel ${editStaffId?'modifié':'créé'} : ${nom} (${role})`);
   closeModal();
   renderPersonnel();
@@ -4257,8 +4279,9 @@ async function deleteStaff(id) {
   const target = USERS.find(u => u.id === id);
   if (target && target.role === 'admin' && admins.length <= 1) { alert('Impossible de supprimer le dernier administrateur.'); return; }
   if (!confirm(`Supprimer le membre "${target?.nom||id}" ?`)) return;
+  markDeleted('users', id);
   USERS = USERS.filter(u => u.id !== id);
-  await apiSet(UK, USERS);
+  await saveUsers();
   await addLog('suppression', `Personnel supprimé : ${target?.nom||id}`);
   renderPersonnel();
   toast('🗑️ Membre supprimé', '#CC0001');
@@ -4826,7 +4849,7 @@ async function init() {
   try {
     const u = await apiGet(UK);
     if (u && Array.isArray(u) && u.length) {
-      USERS = u;
+      USERS = mergeUsers(USERS, u);
       initLoginForm();
     } else {
       await apiSet(UK, USERS); // première initialisation partagée
