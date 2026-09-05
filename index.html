@@ -2510,7 +2510,7 @@ function renderDashboard() {
       const p = patients.find(p => p.id === r.patientId) || {};
       return `<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--br)">
         ${mkAv(p.nom||'X',p.prenom||'X',38,p.photo)}
-        <div style="flex:1"><div style="font-weight:800;font-size:13px">${p.prenom||''} ${p.nom||''}</div><div style="font-size:11px;color:var(--mu)">${r.heure} · ${esc(r.motif)}</div></div>
+        <div style="flex:1"><div style="font-weight:800;font-size:13px">${esc(p.prenom)||''} ${esc(p.nom)||''}</div><div style="font-size:11px;color:var(--mu)">${r.heure} · ${esc(r.motif)}</div></div>
         ${mkBdg(r.statut, r.statut === 'confirmé' ? 'v' : 'o')}
       </div>`;
     }).join('');
@@ -2649,9 +2649,9 @@ function openHistModal(id) {
   if (hh) hh.innerHTML = `${mkAv(p.nom, p.prenom, 52,p.photo)}
     <div>
       <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:700;color:var(--o)">${esc(p.prenom)} ${esc(p.nom)}</div>
-      <div style="font-size:12px;color:var(--mu);margin-top:2px">📍 ${esc(p.region)} · ${p.profession || '—'}</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:2px">📍 ${esc(p.region)} · ${esc(p.profession) || '—'}</div>
       <div style="font-size:12px;color:var(--mu)">🩸 ${p.groupe} · 🛡 ${p.assurance}</div>
-      ${p.urgence ? `<div style="font-size:11px;color:var(--r);margin-top:2px">🚨 ${p.urgence}</div>` : ''}
+      ${p.urgence ? `<div style="font-size:11px;color:var(--r);margin-top:2px">🚨 ${esc(p.urgence)}</div>` : ''}
     </div>`;
   const hb = $('hist-body');
   if (hb) {
@@ -2660,7 +2660,7 @@ function openHistModal(id) {
       : p.historique.map(h => `<div style="border-left:4px solid var(--o);padding-left:14px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--br)">
           <div style="font-family:'Cinzel',serif;font-weight:700;color:var(--o);font-size:11px">${fmtDate(h.date)}</div>
           <div style="font-weight:800;font-size:14px;margin-top:3px">${esc(h.motif)}</div>
-          <div style="font-size:12px;color:var(--v);margin-top:2px">${h.medecin}</div>
+          <div style="font-size:12px;color:var(--v);margin-top:2px">${esc(h.medecin)}</div>
           <div style="font-size:12px;color:var(--mu);margin-top:4px;line-height:1.6">${esc(h.notes)}</div>
         </div>`).join('');
   }
@@ -2694,10 +2694,10 @@ function renderConsults() {
           ${mkAv(p.nom||'X', p.prenom||'X', 46,p.photo)}
           <div style="flex:1">
             <div style="font-family:'Cinzel',serif;font-weight:700;font-size:14px;color:var(--o)">${p.prenom||''} ${p.nom||''}</div>
-            <div style="font-size:11px;color:var(--mu);margin-top:2px">${fmtDate(c.date)} · ${c.medecin}</div>
-            <div style="font-size:14px;color:var(--r);font-weight:800;margin-top:7px">🦠 ${c.diag}</div>
-            ${c.sym ? `<div style="font-size:12px;color:var(--mu);margin-top:3px">Symptômes : ${c.sym}</div>` : ''}
-            ${c.trt ? `<div style="font-size:12px;margin-top:2px">💊 Traitement : <strong>${c.trt}</strong></div>` : ''}
+            <div style="font-size:11px;color:var(--mu);margin-top:2px">${fmtDate(c.date)} · ${esc(c.medecin)}</div>
+            <div style="font-size:14px;color:var(--r);font-weight:800;margin-top:7px">🦠 ${esc(c.diag)}</div>
+            ${c.sym ? `<div style="font-size:12px;color:var(--mu);margin-top:3px">Symptômes : ${esc(c.sym)}</div>` : ''}
+            ${c.trt ? `<div style="font-size:12px;margin-top:2px">💊 Traitement : <strong>${esc(c.trt)}</strong></div>` : ''}
             ${c.notes ? `<div style="font-size:11px;color:var(--mu);margin-top:3px;font-style:italic">📝 ${esc(c.notes)}</div>` : ''}
             <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">
               ${c.ta ? `<div style="background:rgba(255,255,255,.05);border-radius:7px;padding:4px 9px;text-align:center"><div style="font-size:12px;font-weight:900;color:var(--r)">${c.ta}</div><div style="font-size:9px;color:var(--mu)">TA</div></div>` : ''}
@@ -2709,7 +2709,7 @@ function renderConsults() {
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:130px">
           ${mkBdg(c.statut === 'payé' ? '✅ Payé' : '❌ Impayé', c.statut === 'payé' ? 'v' : 'r')}
           <div style="font-family:'Cinzel',serif;font-size:17px;font-weight:900;color:var(--o)">${safeN(c.paiement).toLocaleString('fr-FR')}</div>
-          <div style="font-size:10px;color:var(--mu)">GNF · ${c.mode}</div>
+          <div style="font-size:10px;color:var(--mu)">GNF · ${esc(c.mode)}</div>
           ${canE ? `<button class="btn ${c.statut === 'payé' ? 'g' : 'v'} sm" onclick="togglePaiement(${c.id})">${c.statut === 'payé' ? 'Annuler' : '💰 Marquer payé'}</button>` : ''}
         </div>
       </div>
@@ -2751,8 +2751,35 @@ async function togglePaiement(id) {
   const c = DB.consults.find(c => c.id === id);
   if (!c) return;
   const p = DB.patients.find(p => p.id === c.patientId) || {};
-  c.statut = c.statut === 'payé' ? 'impayé' : 'payé';
-  if (c.statut === 'payé') await addLog('paiement', `Paiement reçu : ${p.prenom||''} ${p.nom||''} — ${fmtGNF(c.paiement)}`);
+  const etaitPaye = c.statut === 'payé';
+  c.statut = etaitPaye ? 'impayé' : 'payé';
+  if (c.statut === 'payé') {
+    await addLog('paiement', `Paiement reçu : ${p.prenom||''} ${p.nom||''} — ${fmtGNF(c.paiement)}`);
+    // Sans ceci, l'argent des consultations payées directement (hors
+    // module Facturation) n'apparaissait jamais dans le solde de
+    // caisse — seules les factures y contribuaient. Même garde
+    // anti-doublon que enregistrerEncaissementFacture (via consultId).
+    if (!DB.caisseMouvements) DB.caisseMouvements = [];
+    const dejaEncaisse = DB.caisseMouvements.some(m => m.consultId === c.id);
+    if (!dejaEncaisse && safeN(c.paiement) > 0) {
+      const session = getSessionOuverte();
+      DB.caisseMouvements.unshift({
+        id: Date.now() + Math.floor(Math.random()*1000),
+        sessionId: session ? session.id : null,
+        date: todayStr(), heure: new Date().toTimeString().slice(0,5),
+        type: 'entrée', montant: safeN(c.paiement),
+        motif: `Consultation — ${p.prenom||''} ${p.nom||''} (${c.diag||''})`,
+        utilisateur: CUR_USER.nom, consultId: c.id,
+      });
+    }
+  } else if (etaitPaye) {
+    // Paiement annulé (repassé à "impayé") : on retire le mouvement de
+    // caisse correspondant, sinon l'argent resterait compté dans le
+    // solde théorique alors qu'il n'est plus marqué payé.
+    const mvt = (DB.caisseMouvements||[]).find(m => m.consultId === c.id);
+    if (mvt) { markDeleted('caisseMouvements', mvt.id); DB.caisseMouvements = DB.caisseMouvements.filter(m => m.consultId !== c.id); }
+    await addLog('paiement', `Paiement annulé : ${p.prenom||''} ${p.nom||''} — ${fmtGNF(c.paiement)}`);
+  }
   await saveDB();
   renderConsults();
 }
@@ -2786,8 +2813,8 @@ function renderCalendrier() {
     return `<tr style="background:${isT ? 'rgba(248,195,0,.05)' : 'transparent'}">
       <td>${isT ? '📌 ' : ''}<strong>${fmtDate(r.date)}</strong></td>
       <td style="font-family:'Cinzel',serif;font-weight:900;color:var(--r)">${r.heure}</td>
-      <td><div style="display:flex;align-items:center;gap:8px">${mkAv(p.nom||'X',p.prenom||'X',28,p.photo)}<span style="font-weight:700;font-size:13px">${p.prenom||''} ${p.nom||''}</span></div></td>
-      <td style="font-size:12px;color:var(--mu)">${r.medecin}</td>
+      <td><div style="display:flex;align-items:center;gap:8px">${mkAv(p.nom||'X',p.prenom||'X',28,p.photo)}<span style="font-weight:700;font-size:13px">${esc(p.prenom)||''} ${esc(p.nom)||''}</span></div></td>
+      <td style="font-size:12px;color:var(--mu)">${esc(r.medecin)}</td>
       <td>${esc(r.motif)}</td>
       <td>${mkBdg(r.salle,'g')}</td>
       <td>${mkBdg(r.statut, r.statut === 'confirmé' ? 'v' : 'o')}</td>
@@ -2866,11 +2893,11 @@ function renderVaccins() {
   body.innerHTML = filtered.map(v => {
     const p = DB.patients.find(p => p.id === v.patientId)||{};
     return `<tr style="background:${v.statut==='prévu'?'rgba(248,195,0,.04)':'transparent'}">
-      <td><div style="display:flex;align-items:center;gap:8px">${mkAv(p.nom||'X',p.prenom||'X',28,p.photo)}<span style="font-weight:700;font-size:12px">${p.prenom||''} ${p.nom||''}</span></div></td>
-      <td style="font-weight:700">${v.vaccin}</td>
+      <td><div style="display:flex;align-items:center;gap:8px">${mkAv(p.nom||'X',p.prenom||'X',28,p.photo)}<span style="font-weight:700;font-size:12px">${esc(p.prenom)||''} ${esc(p.nom)||''}</span></div></td>
+      <td style="font-weight:700">${esc(v.vaccin)}</td>
       <td style="font-size:12px;color:var(--mu)">${fmtDate(v.date)}</td>
-      <td style="font-size:11px;font-family:monospace;color:var(--mu)">${v.lot||'—'}</td>
-      <td style="font-size:11px;color:var(--mu)">${v.par||'—'}</td>
+      <td style="font-size:11px;font-family:monospace;color:var(--mu)">${esc(v.lot)||'—'}</td>
+      <td style="font-size:11px;color:var(--mu)">${esc(v.par)||'—'}</td>
       <td>${mkBdg(v.statut==='fait'?'✅ Fait':'⏳ Prévu', v.statut==='fait'?'v':'o')}</td>
       <td><div style="display:flex;gap:5px">
         ${v.statut==='prévu'&&canE ? `<button class="btn v sm" onclick="marquerVacc(${v.id})">✓ Fait</button>` : ''}
@@ -2967,7 +2994,7 @@ function renderPharmStock() {
     const col = bad ? 'var(--r)' : low ? 'var(--o)' : 'var(--v)';
     return `<tr style="background:${bad?'rgba(204,0,1,.07)':low?'rgba(248,195,0,.04)':'transparent'}">
       <td style="font-weight:800;font-size:12px;max-width:180px"><div style="display:flex;align-items:center;gap:8px">${mkThumb(m.photo,'💊',28)}<span>${esc(m.nom)}</span></div></td>
-      <td style="font-size:11px;color:var(--mu)">${m.cat}</td>
+      <td style="font-size:11px;color:var(--mu)">${esc(m.cat)}</td>
       <td>
         <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:900;color:${col}">${s}</div>
         <div style="height:3px;background:rgba(255,255,255,.1);border-radius:2px;width:44px;margin-top:3px"><div style="height:100%;border-radius:2px;width:${pct}%;background:${col}"></div></div>
@@ -3054,13 +3081,13 @@ function renderOrdonnances() {
     const lignes = (o.lignes||[]).map(l => {
       const m = DB.meds.find(m => m.id === l.medId)||{};
       return `<div style="display:flex;align-items:center;gap:9px;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid var(--br);margin-bottom:5px">
-        <span>💊</span><div style="flex:1"><div style="font-weight:700;font-size:12px">${m.nom||'?'}</div><div style="font-size:11px;color:var(--mu)">${l.pos||''}</div></div>
-        <div style="text-align:right"><div style="font-weight:900;color:var(--o);font-family:'Cinzel',serif;font-size:13px">${safeN(l.qte)}</div><div style="font-size:9px;color:var(--mu)">${m.unite||'unités'}</div></div>
+        <span>💊</span><div style="flex:1"><div style="font-weight:700;font-size:12px">${esc(m.nom)||'?'}</div><div style="font-size:11px;color:var(--mu)">${esc(l.pos)||''}</div></div>
+        <div style="text-align:right"><div style="font-weight:900;color:var(--o);font-family:'Cinzel',serif;font-size:13px">${safeN(l.qte)}</div><div style="font-size:9px;color:var(--mu)">${esc(m.unite)||'unités'}</div></div>
       </div>`;
     }).join('');
     return `<div class="gc slide" style="border-left:4px solid ${o.statut==='dispensée'?'var(--v)':'var(--o)'};animation-delay:${i*.04}s;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:9px;margin-bottom:11px">
-        <div style="display:flex;gap:11px;align-items:center">${mkAv(p.nom||'X',p.prenom||'X',40,p.photo)}<div><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--o);font-size:13px">${p.prenom||''} ${p.nom||''}</div><div style="font-size:11px;color:var(--mu)">${fmtDate(o.date)} · ${o.medecin}</div></div></div>
+        <div style="display:flex;gap:11px;align-items:center">${mkAv(p.nom||'X',p.prenom||'X',40,p.photo)}<div><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--o);font-size:13px">${esc(p.prenom)||''} ${esc(p.nom)||''}</div><div style="font-size:11px;color:var(--mu)">${fmtDate(o.date)} · ${esc(o.medecin)}</div></div></div>
         <div style="display:flex;gap:7px;align-items:center">${mkBdg(o.statut, o.statut==='dispensée'?'v':'o')}<button class="btn g sm" onclick="printOrdonnance(${o.id})">🖨️ Imprimer</button>${o.statut==='en attente'&&canE?`<button class="btn v sm" onclick="dispenserOrd(${o.id})">💊 Dispenser</button>`:''}</div>
       </div>
       ${lignes}
@@ -3087,7 +3114,7 @@ function renderOrdLines() {
       ${DB.meds.map(m => `<option value="${m.id}"${l.medId===m.id?' selected':''}>${esc(m.nom)} (stock:${safeN(m.stock)})</option>`).join('')}
     </select>
     <input type="number" value="${l.qte}" min="1" class="finp" style="font-size:12px;padding:7px 8px" onchange="ordLines[${i}].qte=safeN(this.value)||1" placeholder="Qté"/>
-    <input value="${l.pos}" class="finp" style="font-size:12px;padding:7px 8px" onchange="ordLines[${i}].pos=this.value" placeholder="Posologie"/>
+    <input value="${esc(l.pos)}" class="finp" style="font-size:12px;padding:7px 8px" onchange="ordLines[${i}].pos=this.value" placeholder="Posologie"/>
   </div>`).join('');
 }
 
@@ -3144,8 +3171,8 @@ function printOrdonnance(id) {
   const lignesHTML = (o.lignes||[]).map(l => {
     const m = DB.meds.find(m => m.id === l.medId) || {};
     return `<div style="padding:12px 0;border-bottom:1px solid #e5e5e5">
-      <div style="font-weight:800;font-size:14px">${m.nom || '?'} <span style="font-weight:600;color:#666">— Qté : ${safeN(l.qte)} ${m.unite||''}</span></div>
-      ${l.pos ? `<div style="font-size:12px;color:#666;margin-top:3px">Posologie : ${l.pos}</div>` : ''}
+      <div style="font-weight:800;font-size:14px">${esc(m.nom) || '?'} <span style="font-weight:600;color:#666">— Qté : ${safeN(l.qte)} ${esc(m.unite)||''}</span></div>
+      ${l.pos ? `<div style="font-size:12px;color:#666;margin-top:3px">Posologie : ${esc(l.pos)}</div>` : ''}
     </div>`;
   }).join('');
   const w = window.open('', '_blank', 'width=720,height=900');
@@ -3193,7 +3220,7 @@ function printOrdonnance(id) {
     </div>
     <div class="info-box">
       <h4>Prescripteur</h4>
-      <p>${o.medecin}</p>
+      <p>${esc(o.medecin)}</p>
       <small>${CFG.title} · ${CFG.country}</small>
     </div>
   </div>
@@ -3234,7 +3261,7 @@ function renderCertificats() {
     const p = DB.patients.find(p => p.id === c.patientId) || {};
     return `<div class="gc slide" style="border-left:4px solid var(--o);animation-delay:${i*.04}s;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:9px">
-        <div style="display:flex;gap:11px;align-items:center">${mkAv(p.nom||'X',p.prenom||'X',40,p.photo)}<div><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--o);font-size:13px">${p.prenom||''} ${p.nom||''}</div><div style="font-size:11px;color:var(--mu)">${fmtDate(c.date)} · ${c.medecin}${c.numero?' · '+c.numero:''}</div><div style="font-size:12px;font-weight:700;margin-top:3px">${c.type}${c.jours?' — '+c.jours+' jour(s)':''}</div></div></div>
+        <div style="display:flex;gap:11px;align-items:center">${mkAv(p.nom||'X',p.prenom||'X',40,p.photo)}<div><div style="font-family:'Cinzel',serif;font-weight:700;color:var(--o);font-size:13px">${esc(p.prenom)||''} ${esc(p.nom)||''}</div><div style="font-size:11px;color:var(--mu)">${fmtDate(c.date)} · ${esc(c.medecin)}${c.numero?' · '+esc(c.numero):''}</div><div style="font-size:12px;font-weight:700;margin-top:3px">${esc(c.type)}${c.jours?' — '+esc(String(c.jours))+' jour(s)':''}</div></div></div>
         <div style="display:flex;gap:7px;align-items:center">
           <button class="btn g sm" onclick="printCertificat(${c.id})">🖨️ Imprimer</button>
           ${canE ? `<button class="btn r sm" onclick="deleteCert(${c.id})">🗑</button>` : ''}
@@ -3379,22 +3406,22 @@ function printCertificat(id) {
   if (c.type === 'Certificat de repos médical') {
     corps = `certifie que <strong>${p.prenom||''} ${p.nom||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} a été examiné(e) ce jour et nécessite un repos médical de <strong>${safeN(c.jours)} jour(s)</strong> à compter du ${fmtDate(c.date)}.`;
   } else if (c.type === 'Certificat de bonne santé') {
-    corps = `certifie avoir examiné ce jour <strong>${p.prenom||''} ${p.nom||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} et n'avoir constaté, à l'examen clinique de ce jour, aucune contre-indication apparente à son état de santé général.`;
+    corps = `certifie avoir examiné ce jour <strong>${esc(p.prenom)||''} ${esc(p.nom)||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} et n'avoir constaté, à l'examen clinique de ce jour, aucune contre-indication apparente à son état de santé général.`;
   } else if (c.type === 'Certificat d\'aptitude physique/sportive') {
-    corps = `certifie avoir examiné ce jour <strong>${p.prenom||''} ${p.nom||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} et n'avoir constaté aucune contre-indication apparente à la pratique d'activités physiques et sportives.`;
+    corps = `certifie avoir examiné ce jour <strong>${esc(p.prenom)||''} ${esc(p.nom)||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} et n'avoir constaté aucune contre-indication apparente à la pratique d'activités physiques et sportives.`;
   } else if (c.type === 'Certificat de présence') {
-    corps = `certifie que <strong>${p.prenom||''} ${p.nom||''}</strong> s'est présenté(e) en consultation à ${CFG.title} le ${fmtDate(c.date)}.`;
+    corps = `certifie que <strong>${esc(p.prenom)||''} ${esc(p.nom)||''}</strong> s'est présenté(e) en consultation à ${CFG.title} le ${fmtDate(c.date)}.`;
   } else if (c.type === 'Certificat de vaccination') {
-    corps = `certifie que <strong>${p.prenom||''} ${p.nom||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} a été vacciné(e) conformément au calendrier vaccinal en vigueur.`;
+    corps = `certifie que <strong>${esc(p.prenom)||''} ${esc(p.nom)||''}</strong>${age!==null?', âgé(e) de '+age+' ans,':''} a été vacciné(e) conformément au calendrier vaccinal en vigueur.`;
   } else if (c.type === 'Certificat de naissance médical') {
     const n = c.naissance || {};
-    corps = `certifie que l'enfant <strong>${p.prenom||''} ${p.nom||''}</strong>, de sexe <strong>${n.sexe||'—'}</strong>, est né(e) le <strong>${fmtDate(c.date)}</strong>${n.heure?' à <strong>'+n.heure+'</strong>':''}, à <strong>${n.lieu||'—'}</strong>${n.poids?', avec un poids à la naissance de <strong>'+n.poids+' kg</strong>':''}.<br/><br/>
-    Fils/Fille de <strong>${n.pere||'—'}</strong> (père) et de <strong>${n.mere||'—'}</strong> (mère).<br/><br/>
-    ${n.assistant ? `Accouchement assisté par : <strong>${n.assistant}</strong>.` : ''}`;
+    corps = `certifie que l'enfant <strong>${esc(p.prenom)||''} ${esc(p.nom)||''}</strong>, de sexe <strong>${esc(n.sexe)||'—'}</strong>, est né(e) le <strong>${fmtDate(c.date)}</strong>${n.heure?' à <strong>'+esc(n.heure)+'</strong>':''}, à <strong>${esc(n.lieu)||'—'}</strong>${n.poids?', avec un poids à la naissance de <strong>'+esc(String(n.poids))+' kg</strong>':''}.<br/><br/>
+    Fils/Fille de <strong>${esc(n.pere)||'—'}</strong> (père) et de <strong>${esc(n.mere)||'—'}</strong> (mère).<br/><br/>
+    ${n.assistant ? `Accouchement assisté par : <strong>${esc(n.assistant)}</strong>.` : ''}`;
   } else {
-    corps = `certifie avoir examiné ce jour <strong>${p.prenom||''} ${p.nom||''}</strong>${age!==null?', âgé(e) de '+age+' ans.':'.'}`;
+    corps = `certifie avoir examiné ce jour <strong>${esc(p.prenom)||''} ${esc(p.nom)||''}</strong>${age!==null?', âgé(e) de '+age+' ans.':'.'}`;
   }
-  const qrPayload = `${CFG.title} | ${numCert} | ${p.prenom||''} ${p.nom||''} | ${c.type} | ${fmtDate(c.date)} | ${c.medecin||''}`;
+  const qrPayload = `${CFG.title} | ${numCert} | ${esc(p.prenom)||''} ${esc(p.nom)||''} | ${esc(c.type)} | ${fmtDate(c.date)} | ${esc(c.medecin)||''}`;
   const w = window.open('', '_blank', 'width=760,height=960');
   w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/>
   <title>${c.type} — ${numCert}</title>
@@ -3437,9 +3464,9 @@ function printCertificat(id) {
     <div style="font-size:11px;color:#888;margin-top:6px">${CFG.sub} · ${CFG.country}</div>
   </div>
   <div class="ref">N° ${numCert} · Fait le ${fmtDate(c.date)}</div>
-  <div class="title">${c.type}</div>
+  <div class="title">${esc(c.type)}</div>
   <div class="corps">
-    Je soussigné(e), <strong>${c.medecin}</strong>, exerçant à ${CFG.title},<br/><br/>
+    Je soussigné(e), <strong>${esc(c.medecin)}</strong>, exerçant à ${CFG.title},<br/><br/>
     ${corps}
   </div>
   ${c.motif ? `<div class="motif">Observations : ${esc(c.motif)}</div>` : ''}
@@ -3544,7 +3571,7 @@ function downloadCSV(filename, csv) {
 
 function exportRapport(type) {
   if (!DB) return;
-  const nomP = id => { const p = DB.patients.find(p => p.id === id) || {}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+  const nomP = id => { const p = DB.patients.find(p => p.id === id) || {}; return `${esc(p.prenom)||''} ${esc(p.nom)||''}`.trim(); };
   let rows = [], headers = [], filename = '';
   if (type === 'patients') {
     headers = ['Nom','Prénom','Date de naissance','Téléphone','Région','Groupe sanguin','Assurance','Profession'];
@@ -3581,18 +3608,18 @@ const RAPPORT_LISTES = {
     rows: DB => DB.patients.map(p => [p.nom,p.prenom,fmtDate(p.ddn),p.tel,p.region,p.groupe,p.assurance,p.profession]) },
   consultations: { titre: 'Liste des Consultations', icon: '🩺',
     cols: ['Date','Patient','Médecin','Diagnostic','Montant GNF','Mode','Statut'],
-    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${esc(p.prenom)||''} ${esc(p.nom)||''}`.trim(); };
       return DB.consults.map(c => [fmtDate(c.date),nomP(c.patientId),c.medecin,c.diag,safeN(c.paiement).toLocaleString('fr-FR'),c.mode,c.statut]); } },
   factures: { titre: 'Liste des Factures', icon: '🧾',
     cols: ['Date','Patient','Mode','Statut','Total TTC GNF'],
-    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${esc(p.prenom)||''} ${esc(p.nom)||''}`.trim(); };
       return (DB.factures||[]).map(f => [fmtDate(f.date),nomP(f.patientId),f.mode,f.statut,safeN(f.ttc).toLocaleString('fr-FR')]); } },
   stock: { titre: 'Stock Pharmacie', icon: '💊',
     cols: ['Médicament','Catégorie','Stock','Seuil alerte','Prix GNF','Fournisseur','Unité'],
     rows: DB => DB.meds.map(m => [m.nom,m.cat,safeN(m.stock),safeN(m.seuil),safeN(m.prix).toLocaleString('fr-FR'),m.four,m.unite]) },
   rdv: { titre: 'Liste des Rendez-vous', icon: '📅',
     cols: ['Date','Heure','Patient','Médecin','Motif','Salle','Statut'],
-    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+    rows: DB => { const nomP = id => { const p = DB.patients.find(p=>p.id===id)||{}; return `${esc(p.prenom)||''} ${esc(p.nom)||''}`.trim(); };
       return DB.rdv.map(r => [fmtDate(r.date),r.heure,nomP(r.patientId),r.medecin,r.motif,r.salle,r.statut]); } }
 };
 
@@ -3740,7 +3767,7 @@ function renderRapports() {
 function printRapportAvance() {
   if (!DB) return;
   const {patients, rdv, meds, consults, vaccins, factures} = DB;
-  const nomP = id => { const p = patients.find(p => p.id === id) || {}; return `${p.prenom||''} ${p.nom||''}`.trim(); };
+  const nomP = id => { const p = patients.find(p => p.id === id) || {}; return `${esc(p.prenom)||''} ${esc(p.nom)||''}`.trim(); };
 
   const CA = consults.reduce((s,c) => s + safeN(c.paiement), 0);
   const paye = consults.filter(c => c.statut === 'payé').reduce((s,c) => s + safeN(c.paiement), 0);
@@ -3854,7 +3881,7 @@ function printRapportAvance() {
   <table><thead><tr><th>Médicament</th><th>Catégorie</th><th style="text-align:right">Stock</th><th style="text-align:right">Seuil</th><th>Fournisseur</th></tr></thead>
   <tbody>${
     stockBas.length
-      ? stockBas.map(m => `<tr class="alert-row"><td>${m.nom||'—'}</td><td>${m.cat||'—'}</td><td style="text-align:right">${safeN(m.stock)}</td><td style="text-align:right">${safeN(m.seuil)}</td><td>${m.four||'—'}</td></tr>`).join('')
+      ? stockBas.map(m => `<tr class="alert-row"><td>${esc(m.nom)||'—'}</td><td>${esc(m.cat)||'—'}</td><td style="text-align:right">${safeN(m.stock)}</td><td style="text-align:right">${safeN(m.seuil)}</td><td>${esc(m.four)||'—'}</td></tr>`).join('')
       : `<tr><td colspan="5" style="text-align:center;color:#999">Aucune alerte — stock suffisant partout</td></tr>`
   }</tbody></table>
 
@@ -3862,7 +3889,7 @@ function printRapportAvance() {
   <table><thead><tr><th>Date</th><th>Patient</th><th>Mode</th><th style="text-align:right">Total TTC (GNF)</th></tr></thead>
   <tbody>${
     facturesImpayees.length
-      ? facturesImpayees.map(f => `<tr class="alert-row"><td>${fmtDate(f.date)}</td><td>${nomP(f.patientId)}</td><td>${f.mode||'—'}</td><td style="text-align:right">${safeN(f.ttc).toLocaleString('fr-FR')}</td></tr>`).join('')
+      ? facturesImpayees.map(f => `<tr class="alert-row"><td>${fmtDate(f.date)}</td><td>${nomP(f.patientId)}</td><td>${esc(f.mode)||'—'}</td><td style="text-align:right">${safeN(f.ttc).toLocaleString('fr-FR')}</td></tr>`).join('')
       : `<tr><td colspan="4" style="text-align:center;color:#999">Aucune facture impayée</td></tr>`
   }</tbody></table>
 
@@ -3930,7 +3957,7 @@ function printCarnetPatient(id) {
   if (!DB) return;
   const p = DB.patients.find(p => p.id === id);
   if (!p) return;
-  const nomMed = mid => { const m = DB.meds.find(m => m.id === mid) || {}; return m.nom || '—'; };
+  const nomMed = mid => { const m = DB.meds.find(m => m.id === mid) || {}; return esc(m.nom) || '—'; };
 
   const consultsP = DB.consults.filter(c => c.patientId === id).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const vaccinsP = (DB.vaccins||[]).filter(v => v.patientId === id).sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -3955,11 +3982,11 @@ function printCarnetPatient(id) {
   const consultsHtml = consultsP.length ? consultsP.map(c => `
     <div style="border-left:4px solid #CC0001;padding:8px 14px;margin-bottom:10px;background:#fafafa;border-radius:0 8px 8px 0">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <strong style="font-size:13px">${c.diag||'—'}</strong>
-        <span style="font-size:11px;color:#888">${fmtDate(c.date)} · ${c.medecin||'—'}</span>
+        <strong style="font-size:13px">${esc(c.diag)||'—'}</strong>
+        <span style="font-size:11px;color:#888">${fmtDate(c.date)} · ${esc(c.medecin)||'—'}</span>
       </div>
-      ${c.sym ? `<div style="font-size:12px;color:#555;margin-top:4px">Symptômes : ${c.sym}</div>` : ''}
-      ${c.trt ? `<div style="font-size:12px;color:#555;margin-top:2px">Traitement : ${c.trt}</div>` : ''}
+      ${c.sym ? `<div style="font-size:12px;color:#555;margin-top:4px">Symptômes : ${esc(c.sym)}</div>` : ''}
+      ${c.trt ? `<div style="font-size:12px;color:#555;margin-top:2px">Traitement : ${esc(c.trt)}</div>` : ''}
       <div style="font-size:11px;color:#888;margin-top:4px">
         ${c.ta ? `TA: ${c.ta} · ` : ''}${c.temp ? `Temp: ${c.temp}°C · ` : ''}${c.poids ? `Poids: ${c.poids}kg · ` : ''}
         ${safeN(c.paiement) ? fmtGNF(c.paiement) + ' · ' : ''}<span style="color:${c.statut==='payé'?'#009A44':'#CC2244'};font-weight:700">${c.statut||'—'}</span>
@@ -3968,26 +3995,26 @@ function printCarnetPatient(id) {
     </div>`).join('') : sectionEmpty('Aucune consultation enregistrée.');
 
   const vaccinsHtml = vaccinsP.length ? `<table><thead><tr><th>Date</th><th>Vaccin</th><th>N° Lot</th><th>Administré par</th><th>Statut</th></tr></thead><tbody>
-    ${vaccinsP.map(v => `<tr><td>${fmtDate(v.date)}</td><td>${v.vaccin||'—'}</td><td>${v.lot||'—'}</td><td>${v.par||'—'}</td><td style="color:${v.statut==='fait'?'#009A44':'#F8C300'};font-weight:700">${v.statut||'—'}</td></tr>`).join('')}
+    ${vaccinsP.map(v => `<tr><td>${fmtDate(v.date)}</td><td>${esc(v.vaccin)||'—'}</td><td>${esc(v.lot)||'—'}</td><td>${esc(v.par)||'—'}</td><td style="color:${v.statut==='fait'?'#009A44':'#F8C300'};font-weight:700">${esc(v.statut)||'—'}</td></tr>`).join('')}
   </tbody></table>` : sectionEmpty('Aucune vaccination enregistrée.');
 
   const ordosHtml = ordosP.length ? ordosP.map(o => `
     <div style="border-left:4px solid #009A44;padding:8px 14px;margin-bottom:10px;background:#fafafa;border-radius:0 8px 8px 0">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
         <strong style="font-size:13px">Ordonnance</strong>
-        <span style="font-size:11px;color:#888">${fmtDate(o.date)} · ${o.medecin||'—'} · ${o.statut||'—'}</span>
+        <span style="font-size:11px;color:#888">${fmtDate(o.date)} · ${esc(o.medecin)||'—'} · ${esc(o.statut)||'—'}</span>
       </div>
       <ul style="margin:6px 0 0 18px;font-size:12px;color:#555">
-        ${(o.lignes||[]).map(l => `<li>${nomMed(l.medId)} — ${l.qte||1} × ${l.pos||''}</li>`).join('')}
+        ${(o.lignes||[]).map(l => `<li>${nomMed(l.medId)} — ${l.qte||1} × ${esc(l.pos)||''}</li>`).join('')}
       </ul>
     </div>`).join('') : sectionEmpty('Aucune ordonnance enregistrée.');
 
   const certsHtml = certsP.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Médecin</th><th>Détail</th></tr></thead><tbody>
-    ${certsP.map(c => `<tr><td>${fmtDate(c.date)}</td><td>${c.type||'—'}</td><td>${c.medecin||'—'}</td><td>${c.jours?c.jours+' jour(s)':(c.motif||'—')}</td></tr>`).join('')}
+    ${certsP.map(c => `<tr><td>${fmtDate(c.date)}</td><td>${esc(c.type)||'—'}</td><td>${esc(c.medecin)||'—'}</td><td>${c.jours?esc(String(c.jours))+' jour(s)':(esc(c.motif)||'—')}</td></tr>`).join('')}
   </tbody></table>` : sectionEmpty('Aucun certificat émis.');
 
   const rdvHtml = rdvP.length ? `<table><thead><tr><th>Date</th><th>Heure</th><th>Médecin</th><th>Motif</th><th>Statut</th></tr></thead><tbody>
-    ${rdvP.map(r => `<tr><td>${fmtDate(r.date)}</td><td>${r.heure||'—'}</td><td>${r.medecin||'—'}</td><td>${r.motif||'—'}</td><td>${r.statut||'—'}</td></tr>`).join('')}
+    ${rdvP.map(r => `<tr><td>${fmtDate(r.date)}</td><td>${r.heure||'—'}</td><td>${esc(r.medecin)||'—'}</td><td>${esc(r.motif)||'—'}</td><td>${esc(r.statut)||'—'}</td></tr>`).join('')}
   </tbody></table>` : sectionEmpty('Aucun rendez-vous enregistré.');
 
   const factHtml = factP.length ? `<table><thead><tr><th>Date</th><th>Mode</th><th style="text-align:right">Total TTC</th><th>Statut</th></tr></thead><tbody>
@@ -4035,10 +4062,10 @@ function printCarnetPatient(id) {
   <div class="id-card">
     <div class="id-av">${(p.prenom||'?')[0]||''}${(p.nom||'?')[0]||''}</div>
     <div style="flex:1">
-      <div style="font-family:'Cinzel',serif;font-weight:900;font-size:17px">${p.prenom||''} ${p.nom||''}</div>
-      <div style="font-size:12px;color:#666;margin-top:2px">${age!==null?age+' ans · ':''}📍 ${p.region||'—'} · ${p.profession||'—'}</div>
-      <div style="font-size:12px;color:#666">📞 ${p.tel||'—'} ${p.email?'· ✉️ '+p.email:''}</div>
-      <div style="font-size:12px;color:#666">🩸 ${p.groupe||'—'} · 🛡 ${p.assurance||'—'}${p.urgence?' · 🚨 Contact urgence: '+p.urgence:''}</div>
+      <div style="font-family:'Cinzel',serif;font-weight:900;font-size:17px">${esc(p.prenom)||''} ${esc(p.nom)||''}</div>
+      <div style="font-size:12px;color:#666;margin-top:2px">${age!==null?age+' ans · ':''}📍 ${esc(p.region)||'—'} · ${esc(p.profession)||'—'}</div>
+      <div style="font-size:12px;color:#666">📞 ${esc(p.tel)||'—'} ${p.email?'· ✉️ '+esc(p.email):''}</div>
+      <div style="font-size:12px;color:#666">🩸 ${p.groupe||'—'} · 🛡 ${p.assurance||'—'}${p.urgence?' · 🚨 Contact urgence: '+esc(p.urgence):''}</div>
     </div>
   </div>
   ${p.allergies && p.allergies !== 'Aucune' ? `<div class="allergy">⚠️ Allergie connue : ${esc(p.allergies)}</div>` : ''}
@@ -4135,10 +4162,10 @@ function renderActivity() {
     return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--br);align-items:flex-start">
       <div style="width:32px;height:32px;border-radius:50%;background:${co}22;border:1px solid ${co}44;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${ic}</div>
       <div style="flex:1">
-        <div style="font-weight:700;font-size:13px">${a.msg}</div>
+        <div style="font-weight:700;font-size:13px">${esc(a.msg)}</div>
         <div style="font-size:11px;color:var(--mu);margin-top:2px;display:flex;gap:7px;flex-wrap:wrap">
-          <span style="color:${co};font-weight:700">${a.user||''}</span>
-          <span>·</span><span>${a.role||''}</span>
+          <span style="color:${co};font-weight:700">${esc(a.user)||''}</span>
+          <span>·</span><span>${esc(a.role)||''}</span>
           <span>·</span><span>${ts}</span>
         </div>
       </div>
@@ -4320,8 +4347,8 @@ function renderFacturation() {
         <div style="display:flex;gap:12px;align-items:flex-start;flex:1">
           ${mkAv(p.nom||'X', p.prenom||'X', 44,p.photo)}
           <div style="flex:1">
-            <div style="font-family:'Cinzel',serif;font-weight:700;font-size:14px;color:var(--o)">${p.prenom||''} ${p.nom||''}</div>
-            <div style="font-size:11px;color:var(--mu);margin-top:2px">📅 ${fmtDate(f.date)} · 💳 ${f.mode}</div>
+            <div style="font-family:'Cinzel',serif;font-weight:700;font-size:14px;color:var(--o)">${esc(p.prenom)||''} ${esc(p.nom)||''}</div>
+            <div style="font-size:11px;color:var(--mu);margin-top:2px">📅 ${fmtDate(f.date)} · 💳 ${esc(f.mode)}</div>
             <div style="font-size:11px;color:var(--mu);margin-top:1px">🧾 N° ${String(f.id).slice(-6)} · ${f.lignes.length} prestation(s)</div>
             <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
               ${f.lignes.slice(0,3).map(l => `<span style="font-size:11px;background:rgba(255,245,200,.07);border:1px solid var(--br);border-radius:7px;padding:2px 8px">${esc(l.label)}</span>`).join('')}
@@ -4367,7 +4394,7 @@ function onFactPatientChange() {
   if (!consEl || !patientId) return;
   const patConsults = (DB.consults||[]).filter(c => c.patientId === patientId);
   consEl.innerHTML = '<option value="">Aucune (saisie libre)</option>' +
-    patConsults.map(c => `<option value="${c.id}">${fmtDate(c.date)} — ${c.diag} (${safeN(c.paiement).toLocaleString('fr-FR')} GNF)</option>`).join('');
+    patConsults.map(c => `<option value="${c.id}">${fmtDate(c.date)} — ${esc(c.diag)} (${safeN(c.paiement).toLocaleString('fr-FR')} GNF)</option>`).join('');
   // Pré-remplir si une seule consultation
   if (patConsults.length === 1) {
     consEl.value = patConsults[0].id;
@@ -4471,6 +4498,12 @@ async function deleteFacture(id) {
   if (!confirm('Supprimer cette facture ?')) return;
   markDeleted('factures', id);
   DB.factures = DB.factures.filter(f => f.id !== id);
+  // Si cette facture avait déjà été encaissée (voir
+  // enregistrerEncaissementFacture), on retire aussi le mouvement de
+  // caisse correspondant : sinon l'argent d'une facture supprimée
+  // resterait compté dans le solde théorique de caisse.
+  const mvt = (DB.caisseMouvements||[]).find(m => m.factureId === id);
+  if (mvt) { markDeleted('caisseMouvements', mvt.id); DB.caisseMouvements = DB.caisseMouvements.filter(m => m.factureId !== id); }
   await saveDB();
   renderFacturation();
   toast('🗑️ Facture supprimée', '#CC0001');
@@ -4535,14 +4568,14 @@ function printRecu(id) {
   <div class="info-grid">
     <div class="info-box">
       <h4>Patient</h4>
-      <p>${p.prenom||''} ${p.nom||''}</p>
-      <small>📍 ${p.region||'—'} · 🛡 ${p.assurance||'—'}</small><br/>
-      <small>📞 ${p.tel||'—'}</small>
+      <p>${esc(p.prenom)||''} ${esc(p.nom)||''}</p>
+      <small>📍 ${esc(p.region)||'—'} · 🛡 ${esc(p.assurance)||'—'}</small><br/>
+      <small>📞 ${esc(p.tel)||'—'}</small>
     </div>
     <div class="info-box">
       <h4>Paiement</h4>
-      <p>${f.mode}</p>
-      <small>Émis par : ${f.emetteur||'—'}</small><br/>
+      <p>${esc(f.mode)}</p>
+      <small>Émis par : ${esc(f.emetteur)||'—'}</small><br/>
       <small>Réf. : ${numRecu}</small>
     </div>
   </div>
@@ -4670,8 +4703,8 @@ function renderCaisse() {
     } else {
       mvtsEl.innerHTML = mvts.map((m,i) => `<div class="gc slide" style="border-left:4px solid ${m.type==='entrée'?'var(--v)':'var(--r)'};animation-delay:${i*.03}s;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div>
-          <div style="font-size:13px;font-weight:700">${m.type === 'entrée' ? '⬇️ Entrée' : '⬆️ Sortie'} — ${m.motif||''}</div>
-          <div style="font-size:11px;color:var(--mu);margin-top:2px">🕒 ${m.heure||''} · 👤 ${m.utilisateur||''}</div>
+          <div style="font-size:13px;font-weight:700">${m.type === 'entrée' ? '⬇️ Entrée' : '⬆️ Sortie'} — ${esc(m.motif)||''}</div>
+          <div style="font-size:11px;color:var(--mu);margin-top:2px">🕒 ${m.heure||''} · 👤 ${esc(m.utilisateur)||''}</div>
         </div>
         <div style="font-family:'Cinzel',serif;font-size:15px;font-weight:900;color:${m.type==='entrée'?'var(--v)':'var(--r)'}">${m.type==='entrée'?'+':'-'}${safeN(m.montant).toLocaleString('fr-FR')} GNF</div>
       </div>`).join('');
