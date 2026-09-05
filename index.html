@@ -61,8 +61,19 @@ const auth = getAuth(fbApp);
 // traçabilité par utilisateur côté application), mais ça ferme
 // l'accès public à la base à quiconque tombe sur l'URL du projet.
 let __authReady = new Promise((resolve) => {
+  // Filet de sécurité : sans réseau ET sans session anonyme déjà
+  // persistée localement, onAuthStateChanged/signInAnonymously peuvent
+  // ne jamais aboutir (le SDK reste en attente d'un serveur
+  // injoignable). Sans ce timeout, __ready (utilisé par CHAQUE
+  // apiGet/apiSet) ne se résoudrait jamais et bloquerait toute
+  // l'application indéfiniment au lieu de retomber sur le cache local
+  // IndexedDB déjà disponible hors-ligne.
+  const timeout = setTimeout(() => {
+    console.warn('Auth Firebase : délai dépassé, poursuite sans confirmation réseau (cache local utilisé si disponible).');
+    resolve(null);
+  }, 5000);
   onAuthStateChanged(auth, (user) => {
-    if (user) { resolve(user); return; }
+    if (user) { clearTimeout(timeout); resolve(user); return; }
     signInAnonymously(auth).catch((err) => {
       console.error('Connexion anonyme Firebase échouée:', err);
       // Rendu visible côté script principal (voir showFbAuthError plus
@@ -71,6 +82,7 @@ let __authReady = new Promise((resolve) => {
       // enregistrements en silence — l'utilisateur croit que l'app est
       // cassée ou "hardcodée" alors que c'est juste ce point précis.
       window.__fbAuthError = err && err.code ? err.code : 'unknown';
+      clearTimeout(timeout);
       resolve(null);
     });
   });
@@ -608,6 +620,33 @@ tr:last-child td{border-bottom:none}
   color:var(--gold);display:flex;align-items:center;gap:9px;
 }
 .modal-footer{display:flex;gap:9px;margin-top:22px;justify-content:flex-end}
+
+/* ── VISIONNEUSE PHOTO (ZOOM) ── */
+.photo-zoom-overlay{
+  position:fixed;inset:0;z-index:900;
+  background:rgba(3,4,8,.94);
+  backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;
+  animation:fadeIn .2s ease;
+  cursor:zoom-out;
+}
+.photo-zoom-overlay img{
+  max-width:92vw;max-height:88vh;
+  border-radius:14px;
+  box-shadow:0 30px 90px rgba(0,0,0,.7);
+  object-fit:contain;
+  animation:slideUp .3s cubic-bezier(.22,.68,0,1.2);
+  cursor:default;
+}
+.photo-zoom-close{
+  position:absolute;top:18px;right:18px;
+  width:42px;height:42px;border-radius:50%;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+.photo-zoomable{cursor:zoom-in}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 /* ── AVATAR ── */
 .av{
@@ -1654,15 +1693,25 @@ const stockOk = m => safeN(m.stock) > safeN(m.seuil);
 const stockZero = m => safeN(m.stock) === 0;
 const stockLow = m => !stockZero(m) && safeN(m.stock) <= safeN(m.seuil);
 
+/* ── Zoom photo (patient, staff, médicament) : clic → plein écran ── */
+function openPhotoZoom(src) {
+  if (!src) return;
+  const ov = document.createElement('div');
+  ov.className = 'photo-zoom-overlay';
+  ov.innerHTML = `<div class="photo-zoom-close">✕</div><img src="${src}"/>`;
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
+}
+
 function mkAv(nom, prenom, size = 44, photo = null) {
-  if (photo) return `<img class="av" src="${photo}" style="width:${size}px;height:${size}px;object-fit:cover"/>`;
+  if (photo) return `<img class="av photo-zoomable" src="${photo}" style="width:${size}px;height:${size}px;object-fit:cover" onclick="event.stopPropagation();openPhotoZoom('${photo}')"/>`;
   const [c1, c2] = avColor(nom);
   const initials = ((prenom || '?')[0] + (nom || '?')[0]).toUpperCase();
   return `<div class="av" style="width:${size}px;height:${size}px;font-size:${size * .3}px;background:linear-gradient(135deg,${c1},${c2});box-shadow:0 3px 12px ${c1}55">${initials}</div>`;
 }
 
 function mkThumb(photo, emoji = '💊', size = 34) {
-  if (photo) return `<img src="${photo}" style="width:${size}px;height:${size}px;border-radius:9px;object-fit:cover;border:1px solid var(--glass-border);flex-shrink:0"/>`;
+  if (photo) return `<img class="photo-zoomable" src="${photo}" style="width:${size}px;height:${size}px;border-radius:9px;object-fit:cover;border:1px solid var(--glass-border);flex-shrink:0" onclick="event.stopPropagation();openPhotoZoom('${photo}')"/>`;
   return `<div style="width:${size}px;height:${size}px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.5)}px;flex-shrink:0">${emoji}</div>`;
 }
 
@@ -4111,7 +4160,7 @@ function renderPersonnel() {
     const rc = ROLE_COLORS[u.role] || '#F8C300';
     return `<div class="gc slide">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-        ${u.photo ? `<img src="${u.photo}" style="width:44px;height:44px;border-radius:12px;object-fit:cover;flex-shrink:0"/>` : `<div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,${rc},${rc}88);display:flex;align-items:center;justify-content:center;font-size:20px">${u.icon||'👤'}</div>`}
+        ${u.photo ? `<img class="photo-zoomable" src="${u.photo}" style="width:44px;height:44px;border-radius:12px;object-fit:cover;flex-shrink:0" onclick="event.stopPropagation();openPhotoZoom('${u.photo}')"/>` : `<div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,${rc},${rc}88);display:flex;align-items:center;justify-content:center;font-size:20px">${u.icon||'👤'}</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-weight:800;font-size:14px">${esc(u.nom)}</div>
           <div style="font-size:11px;font-family:monospace;color:var(--mu)">@${u.id}</div>
