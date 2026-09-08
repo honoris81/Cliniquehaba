@@ -408,6 +408,12 @@ nav{flex:1;padding:8px 10px;overflow-y:auto}
   display:none;
 }
 #topbar-install-btn:hover{color:#009A44;background:rgba(0,154,68,.12);transform:scale(1.05)}
+#topbar-search-btn{
+  background:var(--glass-1);border:1px solid var(--glass-border);
+  border-radius:10px;padding:7px 11px;cursor:pointer;font-size:15px;color:var(--txt-3);
+  transition:all .2s;box-shadow:0 1px 0 var(--glass-highlight) inset;flex-shrink:0;
+}
+#topbar-search-btn:hover{color:var(--o);background:var(--gold-dim);transform:scale(1.05)}
 #back-home-btn{
   background:var(--glass-1);border:1px solid var(--glass-border);
   border-radius:10px;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:800;
@@ -823,6 +829,7 @@ tr:last-child td{border-bottom:none}
       <button id="back-home-btn" onclick="goSection('dashboard')" style="display:none">← Accueil</button>
       <div id="topbar-title">🏠 Accueil</div>
       <div class="topbar-stats" id="topbar-stats"></div>
+      <button id="topbar-search-btn" onclick="openGlobalSearch()" title="Recherche globale">🔍</button>
       <div class="role-pill" id="role-pill" style="display:none"></div>
       <button id="topbar-install-btn" onclick="installPWA()" title="Installer l'application">📲</button>
       <button id="topbar-logout-btn" onclick="logout()" title="Déconnexion">🚪</button>
@@ -882,6 +889,10 @@ tr:last-child td{border-bottom:none}
             <div style="font-family:'Cinzel',serif;color:var(--r);font-size:13px;font-weight:700;margin-bottom:12px">⚠️ Alertes Pharmacie</div>
             <div id="dash-alertes"></div>
           </div>
+          <div class="gc">
+            <div style="font-family:'Cinzel',serif;color:var(--r);font-size:13px;font-weight:700;margin-bottom:12px">⏳ Péremptions Proches</div>
+            <div id="dash-peremption"></div>
+          </div>
         </div>
         </div><!-- end #dashboard-full-content -->
       </div>
@@ -930,6 +941,20 @@ tr:last-child td{border-bottom:none}
         <div class="gc tbl-wrap"><table><thead><tr><th>Patient</th><th>Vaccin</th><th>Date</th><th>N° Lot</th><th>Administré par</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="vacc-body"></tbody></table></div>
       </div>
 
+      <!-- MATERNITÉ / SUIVI GROSSESSE -->
+      <div id="s-maternite" class="section">
+        <div class="sec-header">
+          <div><h2 class="sec-title">🤰 Suivi Grossesse (CPN)</h2><p class="sec-sub" id="mat-sub">Consultations prénatales</p></div>
+          <button class="btn v" onclick="openGrossesseModal()" id="btn-new-grossesse">➕ Nouvelle Grossesse</button>
+        </div>
+        <div class="tabs">
+          <button class="tab active" onclick="switchMatTab('encours',this)">🤰 En cours</button>
+          <button class="tab" onclick="switchMatTab('terminees',this)">✅ Terminées</button>
+        </div>
+        <div class="ga" id="mat-kpis" style="margin-bottom:14px"></div>
+        <div id="mat-list"></div>
+      </div>
+
       <!-- PHARMACIE -->
       <div id="s-pharmacie" class="section">
         <div class="sec-header">
@@ -939,6 +964,7 @@ tr:last-child td{border-bottom:none}
         <div class="tabs">
           <button class="tab active" onclick="switchPharmTab('stock',this)">📦 Stock</button>
           <button class="tab" onclick="switchPharmTab('ordonnances',this)">📄 Ordonnances</button>
+          <button class="tab" onclick="switchPharmTab('commandes',this)">🚚 Commandes Fournisseurs</button>
         </div>
         <div id="pharm-stock">
           <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
@@ -946,13 +972,21 @@ tr:last-child td{border-bottom:none}
             <button class="btn v sm" onclick="openMedModal()" id="btn-new-med">➕ Ajouter</button>
           </div>
           <div class="ga" id="stock-kpis" style="margin-bottom:14px"></div>
-          <div class="gc tbl-wrap"><table><thead><tr><th>Médicament</th><th>Cat.</th><th>Stock</th><th>Seuil</th><th>Prix GNF</th><th>État</th><th>Ajuster</th></tr></thead><tbody id="stock-body"></tbody></table></div>
+          <div class="gc tbl-wrap"><table><thead><tr><th>Médicament</th><th>Cat.</th><th>Stock</th><th>Seuil</th><th>Lot</th><th>Péremption</th><th>Prix GNF</th><th>État</th><th>Ajuster</th></tr></thead><tbody id="stock-body"></tbody></table></div>
         </div>
         <div id="pharm-ords" style="display:none">
           <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
             <button class="btn r sm" onclick="openOrdModal()" id="btn-new-ord">➕ Nouvelle Ordonnance</button>
           </div>
           <div id="ord-list"></div>
+        </div>
+        <div id="pharm-commandes" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <p class="sec-sub" id="cmd-sub" style="margin:0"></p>
+            <button class="btn v sm" onclick="openCommandeModal()" id="btn-new-cmd">➕ Nouveau Bon de Commande</button>
+          </div>
+          <div class="ga" id="cmd-kpis" style="margin-bottom:14px"></div>
+          <div id="cmd-list"></div>
         </div>
       </div>
 
@@ -975,6 +1009,17 @@ tr:last-child td{border-bottom:none}
             <button class="btn o sm" onclick="printListeRapport('stock')">💊 Stock Pharmacie PDF</button>
             <button class="btn g sm" onclick="exportRapport('rdv')">📅 Rendez-vous CSV</button>
             <button class="btn o sm" onclick="printListeRapport('rdv')">📅 Rendez-vous PDF</button>
+          </div>
+        </div>
+        <div class="gc glow-o">
+          <div style="font-family:'Cinzel',serif;color:var(--o);font-size:13px;font-weight:700;margin-bottom:6px">🧮 Export Comptable Mensuel</div>
+          <div style="font-size:12.5px;color:var(--mu);line-height:1.6;margin-bottom:14px">
+            Génère un relevé consolidé du mois sélectionné : recettes (consultations + factures) par jour et par mode de paiement, encaissé vs impayé, et achats pharmacie (commandes reçues).
+          </div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+            <input class="finp" type="month" id="cpt-mois" style="width:auto;min-width:160px"/>
+            <button class="btn v sm" onclick="exportComptableCSV()">📁 Export CSV</button>
+            <button class="btn o sm" onclick="printComptableMensuel()">🖨️ Rapport PDF</button>
           </div>
         </div>
         <div class="ga" id="rapp-kpis"></div>
@@ -1118,6 +1163,20 @@ tr:last-child td{border-bottom:none}
             </div>
           </div>
         </div>
+
+        <!-- Sauvegarde / Restauration -->
+        <div class="gc">
+          <div style="font-family:'Cinzel',serif;color:var(--o);font-size:13px;font-weight:700;margin-bottom:6px">💾 Sauvegarde & Restauration</div>
+          <div style="font-size:12.5px;color:var(--mu);line-height:1.6;margin-bottom:14px">
+            Exportez l'intégralité des données (patients, RDV, pharmacie, factures, certificats, personnel...) dans un fichier de sauvegarde téléchargeable.
+            En cas de besoin, restaurez ce fichier : les données seront fusionnées avec celles déjà présentes, sans rien écraser à l'aveugle.
+          </div>
+          <div style="display:flex;gap:11px;flex-wrap:wrap;align-items:center">
+            <button class="btn v" onclick="exportBackupDB()">⬇️ Exporter une sauvegarde</button>
+            <button class="btn g" onclick="triggerImportBackup()">⬆️ Restaurer une sauvegarde</button>
+            <input type="file" id="backup-import-input" accept="application/json,.json" style="display:none" onchange="importBackupDBFile(event)"/>
+          </div>
+        </div>
       </div>
 
     </div><!-- end #content -->
@@ -1159,6 +1218,15 @@ tr:last-child td{border-bottom:none}
 
 <!-- MODALS -->
 <div id="modal-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+
+  <!-- Recherche globale -->
+  <div class="modal-box" id="modal-search-global" style="display:none;width:600px">
+    <div class="modal-header"><div class="modal-title">🔍 Recherche globale</div><button class="btn g sm" onclick="closeModal()">✕</button></div>
+    <div class="field" style="margin-bottom:14px">
+      <input class="finp" id="gs-input" placeholder="Nom de patient, médicament, n° de facture, motif de RDV..." oninput="runGlobalSearch()" style="font-size:14px;padding:12px 14px"/>
+    </div>
+    <div id="gs-results" style="max-height:60vh;overflow-y:auto"><p style="color:var(--mu);font-size:13px;text-align:center;padding:20px">Commencez à taper pour rechercher dans toute l'application.</p></div>
+  </div>
 
   <!-- Patient -->
   <div class="modal-box" id="modal-patient" style="display:none;width:560px">
@@ -1249,6 +1317,53 @@ tr:last-child td{border-bottom:none}
     <div class="modal-footer"><button class="btn g" onclick="closeModal()">Annuler</button><button class="btn v" onclick="saveVacc()">💾 Planifier</button></div>
   </div>
 
+  <!-- Nouvelle Grossesse -->
+  <div class="modal-box" id="modal-grossesse" style="display:none;width:460px">
+    <div class="modal-header"><div class="modal-title">🤰 Nouvelle Grossesse</div><button class="btn g sm" onclick="closeModal()">✕</button></div>
+    <div class="fgrid" style="gap:12px">
+      <div class="field"><label>Patiente</label><select class="fsel" id="mg-patient"></select></div>
+      <div class="field"><label>Date des dernières règles (DDR)</label><input class="finp" type="date" id="mg-ddr" oninput="updateTermePrevu()"/></div>
+      <div class="field"><label>Terme prévu (accouchement)</label><input class="finp" type="date" id="mg-terme" readonly style="opacity:.75"/></div>
+      <div class="field"><label>Gestité (nombre de grossesses)</label><input class="finp" type="number" min="1" id="mg-gestite" value="1"/></div>
+      <div class="field"><label>Parité (nombre d'accouchements)</label><input class="finp" type="number" min="0" id="mg-parite" value="0"/></div>
+      <div class="field"><label>Groupe sanguin</label><input class="finp" id="mg-groupe" placeholder="ex: O+"/></div>
+      <div class="field"><label>Grossesse à risque ?</label><select class="fsel" id="mg-risque"><option value="non">Non</option><option value="oui">Oui</option></select></div>
+    </div>
+    <div class="modal-footer"><button class="btn g" onclick="closeModal()">Annuler</button><button class="btn v" onclick="saveGrossesse()">💾 Créer le dossier</button></div>
+  </div>
+
+  <!-- Nouvelle CPN -->
+  <div class="modal-box" id="modal-cpn" style="display:none;width:560px">
+    <div class="modal-header"><div class="modal-title">🩺 Nouvelle Consultation Prénatale (<span id="mcpn-numero">CPN 1</span>)</div><button class="btn g sm" onclick="closeModal()">✕</button></div>
+    <div class="fgrid fg2" style="gap:12px">
+      <div class="field"><label>Date</label><input class="finp" type="date" id="mcpn-date"/></div>
+      <div class="field"><label>Terme (semaines d'aménorrhée)</label><input class="finp" type="number" min="0" max="45" id="mcpn-sa" placeholder="ex: 24"/></div>
+      <div class="field"><label>Poids (kg)</label><input class="finp" type="number" step="0.1" id="mcpn-poids"/></div>
+      <div class="field"><label>Tension artérielle</label><input class="finp" id="mcpn-ta" placeholder="ex: 120/80"/></div>
+      <div class="field"><label>Hauteur utérine (cm)</label><input class="finp" type="number" step="0.5" id="mcpn-hu"/></div>
+      <div class="field"><label>Bruits du cœur fœtal (BCF)</label><input class="finp" id="mcpn-bcf" placeholder="ex: 140 bpm, perçus"/></div>
+      <div class="field"><label>Œdèmes</label><select class="fsel" id="mcpn-oedemes"><option value="non">Absents</option><option value="oui">Présents</option></select></div>
+      <div class="field"><label>Médecin / Sage-femme</label><select class="fsel" id="mcpn-medecin"></select></div>
+      <div class="field span2"><label>Observations / conduite à tenir</label><textarea class="ftxt" id="mcpn-notes" rows="3" placeholder="Vaccination antitétanique, supplémentation fer/folate, examens prescrits..."></textarea></div>
+      <div class="field span2"><label>Prochain rendez-vous (facultatif)</label><input class="finp" type="date" id="mcpn-prochain"/></div>
+    </div>
+    <div class="modal-footer"><button class="btn g" onclick="closeModal()">Annuler</button><button class="btn v" onclick="saveCpn()">💾 Enregistrer la CPN</button></div>
+  </div>
+
+  <!-- Détail Grossesse (historique CPN) -->
+  <div class="modal-box" id="modal-grossesse-detail" style="display:none;width:640px">
+    <div class="modal-header"><div class="modal-title">🤰 <span id="mgd-title">Dossier Grossesse</span></div><button class="btn g sm" onclick="closeModal()">✕</button></div>
+    <div id="mgd-info" class="gc" style="margin-bottom:14px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;color:var(--o);text-transform:uppercase;letter-spacing:1px">Historique des CPN</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn v sm" id="mgd-btn-cpn" onclick="openCpnModal()">➕ Nouvelle CPN</button>
+        <button class="btn o sm" id="mgd-btn-cloturer" onclick="cloturerGrossesse()">✅ Clôturer (accouchement)</button>
+      </div>
+    </div>
+    <div id="mgd-cpn-list" style="max-height:45vh;overflow-y:auto"></div>
+  </div>
+
   <!-- Médicament -->
   <div class="modal-box" id="modal-med" style="display:none;width:460px">
     <div class="modal-header"><div class="modal-title">💊 Ajouter un Médicament</div><button class="btn g sm" onclick="closeModal()">✕</button></div>
@@ -1268,6 +1383,8 @@ tr:last-child td{border-bottom:none}
       <div class="field"><label>Seuil alerte</label><input class="finp" type="number" min="0" id="mm-seuil" value="20"/></div>
       <div class="field"><label>Prix (GNF)</label><input class="finp" type="number" min="0" id="mm-prix" value="0"/></div>
       <div class="field"><label>Unité</label><input class="finp" id="mm-unite" value="comprimé"/></div>
+      <div class="field"><label>N° de lot</label><input class="finp" id="mm-lot" placeholder="ex: ALX-2601"/></div>
+      <div class="field"><label>Date de péremption</label><input class="finp" type="date" id="mm-peremption"/></div>
     </div>
     <div class="modal-footer"><button class="btn g" onclick="closeModal()">Annuler</button><button class="btn v" onclick="saveMed()">💾 Enregistrer</button></div>
   </div>
@@ -1305,6 +1422,23 @@ tr:last-child td{border-bottom:none}
       <button class="btn d sm" onclick="addOrdLine()" style="margin-top:6px">+ Ajouter ligne</button>
     </div>
     <div class="modal-footer"><button class="btn g" onclick="closeModal()">Annuler</button><button class="btn r" onclick="saveOrd()">💾 Enregistrer</button></div>
+  </div>
+
+  <!-- Bon de commande fournisseur -->
+  <div class="modal-box" id="modal-cmd" style="display:none;width:560px">
+    <div class="modal-header"><div class="modal-title">🚚 <span id="mc-title">Nouveau Bon de Commande</span></div><button class="btn g sm" onclick="closeModal()">✕</button></div>
+    <div class="fgrid fg2" style="margin-bottom:14px">
+      <div class="field"><label>Fournisseur</label><select class="fsel" id="mc-four"></select></div>
+      <div class="field"><label>Date prévue de livraison</label><input class="finp" type="date" id="mc-date-livraison"/></div>
+      <div class="field span2"><label>Note (facultatif)</label><input class="finp" id="mc-note" placeholder="Référence interne, remarque..."/></div>
+    </div>
+    <div style="border-top:1px solid var(--br);padding-top:12px">
+      <div style="font-size:10px;font-weight:800;color:var(--o);text-transform:uppercase;letter-spacing:1px;margin-bottom:9px">Médicaments commandés</div>
+      <div id="cmd-lines"></div>
+      <button class="btn d sm" onclick="addCmdLine()" style="margin-top:6px">+ Ajouter ligne</button>
+    </div>
+    <div style="text-align:right;margin-top:14px;font-size:13px;color:var(--mu)">Total estimé : <span id="mc-total" style="font-weight:800;color:var(--o)">0 GNF</span></div>
+    <div class="modal-footer"><button class="btn g" onclick="closeModal()">Annuler</button><button class="btn v" onclick="saveCommande()">💾 Enregistrer</button></div>
   </div>
 
   <!-- Facture / Reçu -->
@@ -1588,9 +1722,9 @@ async function sha256Hex(str) {
 }
 const PERMS = {
   admin: ['all'],
-  medecin: ['patients','rdv','consults','rapports','facturation','certificats'],
+  medecin: ['patients','rdv','consults','rapports','facturation','certificats','maternite'],
   pharmacien: ['pharmacie','rapports'],
-  infirmier: ['patients','rdv','vaccins','consults']
+  infirmier: ['patients','rdv','vaccins','consults','maternite']
 };
 const ROLE_COLORS = {admin:'#F8C300',medecin:'#009A44',pharmacien:'#8b5cf6',infirmier:'#06b6d4'};
 
@@ -1614,14 +1748,14 @@ const INIT_DATA = {
     {id:3,patientId:3,date:'2026-03-21',heure:'08:30',medecin:'Dr. Mamadou Bah',motif:'Contrôle typhoïde',statut:'en attente',salle:'Salle 1'},
   ],
   meds: [
-    {id:1,nom:'Arthémether-Luméfantrine 20/120mg',cat:'Antipaludique',stock:150,seuil:40,prix:3500,four:'CAMEG',unite:'comprimé'},
-    {id:2,nom:'Ciprofloxacine 500mg',cat:'Antibiotique',stock:80,seuil:25,prix:2800,four:'PharmaSanté GN',unite:'comprimé'},
-    {id:3,nom:'Amlodipine 5mg',cat:'Antihypertenseur',stock:12,seuil:30,prix:1500,four:'CAMEG',unite:'comprimé'},
-    {id:4,nom:'Paracétamol 1g',cat:'Analgésique',stock:300,seuil:60,prix:500,four:'MédiPlus GN',unite:'comprimé'},
-    {id:5,nom:'SRO (sachets)',cat:'Réhydratation',stock:5,seuil:50,prix:300,four:'UNICEF',unite:'sachet'},
-    {id:6,nom:'Metformine 850mg',cat:'Antidiabétique',stock:45,seuil:20,prix:2200,four:'MédiPlus GN',unite:'comprimé'},
-    {id:7,nom:'Fer + Acide folique',cat:'Supplémentation',stock:200,seuil:50,prix:400,four:'CAMEG',unite:'comprimé'},
-    {id:8,nom:'Quinine 300mg',cat:'Antipaludique',stock:0,seuil:30,prix:4000,four:'CAMEG',unite:'ampoule'},
+    {id:1,nom:'Arthémether-Luméfantrine 20/120mg',cat:'Antipaludique',stock:150,seuil:40,prix:3500,four:'CAMEG',unite:'comprimé',lot:'ALX-2601',datePeremption:'2027-02-28'},
+    {id:2,nom:'Ciprofloxacine 500mg',cat:'Antibiotique',stock:80,seuil:25,prix:2800,four:'PharmaSanté GN',unite:'comprimé',lot:'CIP-2588',datePeremption:'2026-10-15'},
+    {id:3,nom:'Amlodipine 5mg',cat:'Antihypertenseur',stock:12,seuil:30,prix:1500,four:'CAMEG',unite:'comprimé',lot:'AML-2544',datePeremption:'2028-01-31'},
+    {id:4,nom:'Paracétamol 1g',cat:'Analgésique',stock:300,seuil:60,prix:500,four:'MédiPlus GN',unite:'comprimé',lot:'PARA-2599',datePeremption:'2026-09-30'},
+    {id:5,nom:'SRO (sachets)',cat:'Réhydratation',stock:5,seuil:50,prix:300,four:'UNICEF',unite:'sachet',lot:'SRO-2570',datePeremption:'2027-05-20'},
+    {id:6,nom:'Metformine 850mg',cat:'Antidiabétique',stock:45,seuil:20,prix:2200,four:'MédiPlus GN',unite:'comprimé',lot:'MET-2555',datePeremption:'2026-12-10'},
+    {id:7,nom:'Fer + Acide folique',cat:'Supplémentation',stock:200,seuil:50,prix:400,four:'CAMEG',unite:'comprimé',lot:'FEF-2560',datePeremption:'2027-08-01'},
+    {id:8,nom:'Quinine 300mg',cat:'Antipaludique',stock:0,seuil:30,prix:4000,four:'CAMEG',unite:'ampoule',lot:'QUI-2530',datePeremption:'2026-09-25'},
   ],
   ordonnances: [
     {id:1,patientId:1,date:'2026-01-20',medecin:'Dr. Mamadou Bah',lignes:[{medId:4,qte:20,pos:'3/j 5j'}],statut:'dispensée'},
@@ -1641,6 +1775,8 @@ const INIT_DATA = {
   certificats: [],
   caisseSessions: [],
   caisseMouvements: [],
+  commandes: [],
+  grossesses: [],
 };
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1733,6 +1869,8 @@ let patPhotoData = null;
 let staffPhotoData = null;
 let medPhotoData = null;
 let ordLines = [];
+let cmdLines = [];
+let editCmdId = null;
 let syncTimer = null;
 let heartbeatTimer = null;
 let lastSync = null;
@@ -1747,6 +1885,10 @@ const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
+// Échappe une valeur destinée à être insérée entre guillemets simples
+// dans un attribut HTML du type onclick="fn('...')" — distinct de esc()
+// qui échappe pour du contenu texte/attribut HTML classique.
+const escJs = v => String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmtDate = d => { try { return d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR') : '—'; } catch { return '—'; } };
 const todayStr = () => new Date().toISOString().split('T')[0];
 const fmtGNF = n => (+(n) || 0).toLocaleString('fr-FR') + ' GNF';
@@ -1759,6 +1901,17 @@ const imcColor = v => !v ? '#6b7280' : v < 18.5 ? '#F8C300' : v < 25 ? '#009A44'
 const stockOk = m => safeN(m.stock) > safeN(m.seuil);
 const stockZero = m => safeN(m.stock) === 0;
 const stockLow = m => !stockZero(m) && safeN(m.stock) <= safeN(m.seuil);
+// Péremption : seuil d'alerte à 60 jours avant expiration (configurable ici).
+const PEREMPTION_ALERTE_JOURS = 60;
+function joursAvantPeremption(m) {
+  if (!m.datePeremption) return null;
+  const d = new Date(m.datePeremption + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  const today = new Date(todayStr() + 'T00:00:00');
+  return Math.round((d - today) / 86400000);
+}
+const perimeExpire = m => { const j = joursAvantPeremption(m); return j !== null && j < 0; };
+const perimeProche = m => { const j = joursAvantPeremption(m); return j !== null && j >= 0 && j <= PEREMPTION_ALERTE_JOURS; };
 
 /* ── Zoom photo (patient, staff, médicament) : clic → plein écran ── */
 function openPhotoZoom(src) {
@@ -2031,7 +2184,7 @@ function renderOnline() {
    Rien n'est donc perdu même si deux postes modifient des choses
    différentes entre deux synchronisations.
 ══════════════════════════════════════════════════════════════════ */
-const DB_COLLECTIONS = ['patients','rdv','meds','ordonnances','consults','vaccins','factures','certificats','caisseSessions','caisseMouvements'];
+const DB_COLLECTIONS = ['patients','rdv','meds','ordonnances','consults','vaccins','factures','certificats','caisseSessions','caisseMouvements','commandes','grossesses'];
 
 // Registre des suppressions récentes : { "collection:id": timestamp }.
 // Nécessaire car mergeCollection() est additif par id (il récupère tout
@@ -2264,6 +2417,91 @@ async function saveDB() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   SAUVEGARDE / RESTAURATION COMPLÈTE (export-import JSON)
+   Permet d'exporter toute la base (DB + config + personnel, hors
+   mots de passe hachés qui restent dans USERS) dans un fichier
+   téléchargeable, et de la restaurer plus tard — utile avant une
+   mise à jour, un changement de poste, ou simplement comme backup
+   régulier hors Firebase.
+══════════════════════════════════════════════════════════════════ */
+function exportBackupDB() {
+  if (!DB) { toast('Aucune donnée à exporter.', 'r'); return; }
+  const payload = {
+    __type: 'clinique-haba-backup',
+    __version: 1,
+    exportedAt: new Date().toISOString(),
+    exportedBy: CUR_USER ? CUR_USER.nom : 'inconnu',
+    config: CFG,
+    db: DB,
+    users: USERS,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  a.href = url;
+  a.download = `clinique-haba-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  addLog('export', 'Sauvegarde complète exportée');
+  toast('✅ Sauvegarde téléchargée.', 'v');
+}
+
+function triggerImportBackup() {
+  const input = $('backup-import-input');
+  if (input) input.click();
+}
+
+async function importBackupDBFile(evt) {
+  const file = evt.target.files && evt.target.files[0];
+  evt.target.value = ''; // permet de resélectionner le même fichier plus tard
+  if (!file) return;
+  let payload;
+  try {
+    const text = await file.text();
+    payload = JSON.parse(text);
+  } catch (e) {
+    alert('Fichier invalide : ce n\'est pas un JSON valide.');
+    return;
+  }
+  if (!payload || payload.__type !== 'clinique-haba-backup' || !payload.db) {
+    alert('Ce fichier ne semble pas être une sauvegarde Clinique Haba valide.');
+    return;
+  }
+  const dateStr = payload.exportedAt ? new Date(payload.exportedAt).toLocaleString('fr-FR') : 'date inconnue';
+  const ok = confirm(
+    `⚠️ Restaurer cette sauvegarde ?\n\n` +
+    `Exportée le : ${dateStr}\n` +
+    `Par : ${payload.exportedBy || 'inconnu'}\n\n` +
+    `Les données de cette sauvegarde seront fusionnées avec les données actuelles ` +
+    `(la version la plus récente de chaque fiche est conservée). ` +
+    `Cette action ne peut pas être annulée automatiquement.`
+  );
+  if (!ok) return;
+
+  // Fusion avec les données actuelles via la même logique que la
+  // synchronisation multi-poste (mergeDB), pour ne rien écraser à
+  // l'aveugle : la sauvegarde vient compléter/mettre à jour, pas remplacer.
+  DB = DB ? mergeDB(DB, payload.db) : payload.db;
+  if (payload.users && payload.users.length) {
+    USERS = mergeUsers(USERS, payload.users);
+    await apiSet(UK, USERS);
+  }
+  if (payload.config) {
+    CFG = {...CFG, ...payload.config};
+    await apiSet(CK, CFG);
+    applyConfig(CFG);
+    loadConfigIntoForm();
+  }
+  await saveDB();
+  await addLog('import', `Sauvegarde restaurée (exportée le ${dateStr})`);
+  toast('✅ Sauvegarde restaurée avec succès.', 'v');
+  renderSection();
+}
+
+/* ══════════════════════════════════════════════════════════════════
    AUTH
 ══════════════════════════════════════════════════════════════════ */
 function initLoginForm() {
@@ -2401,6 +2639,7 @@ const ALL_NAV = [
   {k:'consults',icon:'🩺',label:'Consultations',sec:'consults'},
   {k:'rdv',icon:'📅',label:'Calendrier',sec:'rdv'},
   {k:'vaccins',icon:'💉',label:'Vaccinations',sec:'vaccins'},
+  {k:'maternite',icon:'🤰',label:'Suivi Grossesse',sec:'maternite'},
   {k:'pharmacie',icon:'💊',label:'Pharmacie',sec:'pharmacie'},
   {k:'facturation',icon:'🧾',label:'Facturation',sec:'facturation'},
   {k:'certificats',icon:'📜',label:'Certificats',sec:'certificats'},
@@ -2498,12 +2737,15 @@ function goSection(k) {
 function renderSection(k) {
   if (!DB) return;
   if (!DB.factures) DB.factures = []; // guard migration données anciennes
+  if (!DB.commandes) DB.commandes = []; // guard migration données anciennes
+  if (!DB.grossesses) DB.grossesses = []; // guard migration données anciennes
   switch(k) {
     case 'dashboard': renderDashboard(); break;
     case 'patients': renderPatients(); break;
     case 'consults': renderConsults(); break;
     case 'rdv': renderCalendrier(); break;
     case 'vaccins': renderVaccins(); break;
+    case 'maternite': renderMaternite(); break;
     case 'pharmacie': renderPharmStock(); break;
     case 'facturation': renderFacturation(); break;
     case 'certificats': renderCertificats(); break;
@@ -2513,6 +2755,128 @@ function renderSection(k) {
     case 'parametres': loadConfigIntoForm(); buildEmojiPicker(); break;
   }
   updateTopbar();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RECHERCHE GLOBALE
+   Cherche simultanément dans patients, RDV, pharmacie, factures et
+   certificats, et affiche des résultats groupés cliquables qui
+   naviguent vers la bonne section (et, quand c'est pertinent,
+   pré-remplissent le champ de recherche du module concerné pour
+   filtrer automatiquement la liste).
+══════════════════════════════════════════════════════════════════ */
+function openGlobalSearch() {
+  const inp = $('gs-input'); if (inp) inp.value = '';
+  const res = $('gs-results');
+  if (res) res.innerHTML = '<p style="color:var(--mu);font-size:13px;text-align:center;padding:20px">Commencez à taper pour rechercher dans toute l\'application.</p>';
+  showModal('modal-search-global');
+  setTimeout(() => { const el = $('gs-input'); if (el) el.focus(); }, 80);
+}
+
+function gsSectionRow(icon, label, count) {
+  return `<div style="font-size:10px;font-weight:800;color:var(--o);text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;display:flex;align-items:center;gap:6px">${icon} ${label} <span style="color:var(--mu);font-weight:600">(${count})</span></div>`;
+}
+
+function runGlobalSearch() {
+  const raw = ($('gs-input')||{}).value || '';
+  const q = raw.trim().toLowerCase();
+  const res = $('gs-results');
+  if (!res) return;
+  if (!DB || q.length < 2) {
+    res.innerHTML = `<p style="color:var(--mu);font-size:13px;text-align:center;padding:20px">${q.length ? 'Continuez à taper (2 caractères min.)...' : 'Commencez à taper pour rechercher dans toute l\'application.'}</p>`;
+    return;
+  }
+
+  const MAX_PER_GROUP = 6;
+  let blocks = [];
+
+  // Patients
+  const patients = DB.patients.filter(p => `${p.nom||''} ${p.prenom||''} ${p.tel||''} ${p.region||''}`.toLowerCase().includes(q)).slice(0, MAX_PER_GROUP);
+  if (patients.length) {
+    blocks.push(gsSectionRow('👥', 'Patients', patients.length) + patients.map(p => `
+      <div class="gc" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px" onclick="gsGoPatient(${p.id})">
+        ${mkAv(p.nom||'X', p.prenom||'X', 34, p.photo)}
+        <div style="flex:1"><div style="font-weight:700;font-size:12.5px">${esc(p.prenom)} ${esc(p.nom)}</div><div style="font-size:11px;color:var(--mu)">${esc(p.tel||'')} · ${esc(p.region||'')}</div></div>
+      </div>`).join(''));
+  }
+
+  // Rendez-vous
+  const rdv = DB.rdv.filter(r => {
+    const p = DB.patients.find(p => p.id === r.patientId) || {};
+    return `${p.nom||''} ${p.prenom||''} ${r.motif||''} ${r.medecin||''}`.toLowerCase().includes(q);
+  }).slice(0, MAX_PER_GROUP);
+  if (rdv.length) {
+    blocks.push(gsSectionRow('📅', 'Rendez-vous', rdv.length) + rdv.map(r => {
+      const p = DB.patients.find(p => p.id === r.patientId) || {};
+      return `<div class="gc" style="padding:10px 14px;margin-bottom:6px;cursor:pointer" onclick="gsGoSection('rdv')">
+        <div style="font-weight:700;font-size:12.5px">${esc(p.prenom||'')} ${esc(p.nom||'')} — ${esc(r.motif)}</div>
+        <div style="font-size:11px;color:var(--mu)">${fmtDate(r.date)} · ${r.heure} · ${esc(r.medecin)}</div>
+      </div>`;
+    }).join(''));
+  }
+
+  // Pharmacie
+  const meds = DB.meds.filter(m => `${m.nom||''} ${m.cat||''} ${m.lot||''}`.toLowerCase().includes(q)).slice(0, MAX_PER_GROUP);
+  if (meds.length) {
+    blocks.push(gsSectionRow('💊', 'Pharmacie', meds.length) + meds.map(m => `
+      <div class="gc" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px" onclick="gsGoSearch('pharmacie','stock-search','${escJs(m.nom)}')">
+        ${mkThumb(m.photo,'💊',30)}
+        <div style="flex:1"><div style="font-weight:700;font-size:12.5px">${esc(m.nom)}</div><div style="font-size:11px;color:var(--mu)">Stock: ${safeN(m.stock)} · ${esc(m.cat)}</div></div>
+        ${stockZero(m) ? mkBdg('RUPTURE','r') : stockLow(m) ? mkBdg('Bas','o') : ''}
+      </div>`).join(''));
+  }
+
+  // Factures
+  const factures = DB.factures.filter(f => {
+    const p = DB.patients.find(p => p.id === f.patientId) || {};
+    return `${p.nom||''} ${p.prenom||''} ${String(f.id)}`.toLowerCase().includes(q);
+  }).slice(0, MAX_PER_GROUP);
+  if (factures.length) {
+    blocks.push(gsSectionRow('🧾', 'Factures', factures.length) + factures.map(f => {
+      const p = DB.patients.find(p => p.id === f.patientId) || {};
+      return `<div class="gc" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="gsGoSearch('facturation','fact-search','${escJs((p.prenom||'')+' '+(p.nom||''))}')">
+        <div><div style="font-weight:700;font-size:12.5px">${esc(p.prenom||'')} ${esc(p.nom||'')} · N° ${String(f.id).slice(-6)}</div><div style="font-size:11px;color:var(--mu)">${fmtDate(f.date)} · ${safeN(f.ttc).toLocaleString('fr-FR')} GNF</div></div>
+        ${mkBdg(f.statut === 'payé' ? 'Payée' : 'Impayée', f.statut === 'payé' ? 'v' : 'r')}
+      </div>`;
+    }).join(''));
+  }
+
+  // Certificats
+  const certs = (DB.certificats||[]).filter(c => {
+    const p = DB.patients.find(p => p.id === c.patientId) || {};
+    return `${p.nom||''} ${p.prenom||''} ${c.type||''}`.toLowerCase().includes(q);
+  }).slice(0, MAX_PER_GROUP);
+  if (certs.length) {
+    blocks.push(gsSectionRow('📜', 'Certificats', certs.length) + certs.map(c => {
+      const p = DB.patients.find(p => p.id === c.patientId) || {};
+      return `<div class="gc" style="padding:10px 14px;margin-bottom:6px;cursor:pointer" onclick="gsGoSection('certificats')">
+        <div style="font-weight:700;font-size:12.5px">${esc(p.prenom||'')} ${esc(p.nom||'')} — ${esc(c.type)}</div>
+        <div style="font-size:11px;color:var(--mu)">${fmtDate(c.date)}</div>
+      </div>`;
+    }).join(''));
+  }
+
+  res.innerHTML = blocks.length ? blocks.join('') : '<p style="color:var(--mu);font-size:13px;text-align:center;padding:20px">Aucun résultat pour cette recherche.</p>';
+}
+
+function gsGoPatient(id) {
+  closeModal();
+  goSection('patients');
+  setTimeout(() => openPatientModal(id), 120);
+}
+
+function gsGoSection(section) {
+  closeModal();
+  goSection(section);
+}
+
+function gsGoSearch(section, inputId, value) {
+  closeModal();
+  goSection(section);
+  setTimeout(() => {
+    const el = $(inputId);
+    if (el) { el.value = value; el.dispatchEvent(new Event('input')); }
+  }, 120);
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2565,6 +2929,7 @@ function renderDashboard() {
   const CA = consults.reduce((s,c) => s + safeN(c.paiement), 0);
   const paye = consults.filter(c => c.statut === 'payé').reduce((s,c) => s + safeN(c.paiement), 0);
   const alertes = meds.filter(m => stockLow(m) || stockZero(m));
+  const alertesPeremption = meds.filter(m => perimeExpire(m) || perimeProche(m));
   const rdvAuj = rdv.filter(r => r.date === todayStr());
 
   // Stats
@@ -2576,6 +2941,7 @@ function renderDashboard() {
       {l:'Consultations',v:consults.length,i:'🩺',c:'var(--v)',s:'enregistrées'},
       {l:'Recettes',v:CA.toLocaleString('fr-FR'),i:'💰',c:'var(--o)',s:'GNF'},
       {l:'Alertes stock',v:alertes.length,i:'⚠️',c:'var(--r)',s:'médicaments'},
+      {l:'Péremption',v:alertesPeremption.length,i:'⏳',c:'var(--r)',s:'à surveiller'},
       {l:'En ligne',v:ONLINE.length,i:'🟢',c:'var(--v)',s:'utilisateurs'},
     ];
     stats.innerHTML = data.map((s, i) => `<div class="gc slide" style="cursor:default;animation-delay:${i*.05}s">
@@ -2626,6 +2992,21 @@ function renderDashboard() {
           <div><div style="font-weight:700;font-size:12px">${esc(m.nom)}</div><div style="font-size:10px;color:var(--mu)">Stock: ${safeN(m.stock)} / Seuil: ${safeN(m.seuil)}</div></div>
           ${mkBdg(stockZero(m) ? 'RUPTURE' : 'Bas', stockZero(m) ? 'r' : 'o')}
         </div>`).join('');
+  }
+
+  // Alertes péremption
+  const perEl = $('dash-peremption');
+  if (perEl) {
+    perEl.innerHTML = alertesPeremption.length === 0
+      ? '<p style="color:var(--v);font-weight:700;font-size:13px">✅ Aucune péremption proche.</p>'
+      : alertesPeremption.sort((a,b) => joursAvantPeremption(a) - joursAvantPeremption(b)).map(m => {
+          const j = joursAvantPeremption(m);
+          const exp = j < 0;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--br)">
+            <div><div style="font-weight:700;font-size:12px">${esc(m.nom)}</div><div style="font-size:10px;color:var(--mu)">Lot ${esc(m.lot||'—')} · ${new Date(m.datePeremption+'T00:00:00').toLocaleDateString('fr-FR')}</div></div>
+            ${mkBdg(exp ? 'EXPIRÉ' : `J-${j}`, 'r')}
+          </div>`;
+        }).join('');
   }
 
   renderOnline();
@@ -3088,6 +3469,228 @@ async function deleteVacc(id) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   MATERNITÉ — SUIVI GROSSESSE / CPN
+   Un dossier "grossesse" est ouvert pour une patiente (DDR, terme
+   prévu calculé automatiquement à DDR+280 jours, antécédents
+   obstétricaux) et regroupe l'historique de ses consultations
+   prénatales (CPN) : terme en SA, constantes (poids, TA, hauteur
+   utérine, BCF, œdèmes), observations et prochain rendez-vous.
+   La grossesse est clôturée manuellement à l'accouchement.
+══════════════════════════════════════════════════════════════════ */
+let matTab = 'encours';
+let cpnGrossesseId = null; // grossesse actuellement ouverte dans le modal détail/CPN
+
+function updateTermePrevu() {
+  const ddr = ($('mg-ddr')||{}).value;
+  const out = $('mg-terme');
+  if (!out) return;
+  if (!ddr) { out.value = ''; return; }
+  const d = new Date(ddr + 'T00:00:00');
+  d.setDate(d.getDate() + 280); // règle de Naegele
+  out.value = d.toISOString().split('T')[0];
+}
+
+function switchMatTab(tab, btn) {
+  matTab = tab;
+  document.querySelectorAll('#s-maternite .tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderMaternite();
+}
+
+function openGrossesseModal() {
+  $('mg-patient').innerHTML = '<option value="">Sélectionner...</option>' + DB.patients
+    .filter(p => !DB.grossesses.some(g => g.patientId === p.id && g.statut === 'en cours'))
+    .map(p => `<option value="${p.id}">${esc(p.prenom)} ${esc(p.nom)}</option>`).join('');
+  $('mg-ddr').value = ''; $('mg-terme').value = '';
+  $('mg-gestite').value = 1; $('mg-parite').value = 0;
+  $('mg-groupe').value = ''; $('mg-risque').value = 'non';
+  showModal('modal-grossesse');
+}
+
+async function saveGrossesse() {
+  const g = id => ($(id)||{}).value || '';
+  const patientId = +g('mg-patient');
+  const ddr = g('mg-ddr');
+  if (!patientId || !ddr) { alert('Patiente et DDR requises.'); return; }
+  const p = DB.patients.find(p => p.id === patientId) || {};
+  if (DB.grossesses.some(gr => gr.patientId === patientId && gr.statut === 'en cours')) {
+    alert('Cette patiente a déjà un dossier de grossesse en cours.'); return;
+  }
+  DB.grossesses.push({
+    id: Date.now(), patientId, ddr, termePrevu: g('mg-terme'),
+    gestite: safeN(g('mg-gestite'))||1, parite: safeN(g('mg-parite')),
+    groupe: g('mg-groupe').trim(), risque: g('mg-risque') === 'oui',
+    statut: 'en cours', dateAccouchement: null, cpns: [],
+  });
+  await saveDB();
+  await addLog('maternite', `Dossier grossesse ouvert : ${p.prenom||''} ${p.nom||''}`);
+  closeModal();
+  renderMaternite();
+}
+
+function ageGestationnel(grossesse) {
+  const d = new Date(grossesse.ddr + 'T00:00:00');
+  const today = new Date(todayStr() + 'T00:00:00');
+  const jours = Math.round((today - d) / 86400000);
+  return { sa: Math.floor(jours / 7), j: jours % 7 };
+}
+
+function renderMaternite() {
+  if (!DB) return;
+  if (!DB.grossesses) DB.grossesses = [];
+  const canE = can(CUR_USER.role, 'maternite');
+  const btn = $('btn-new-grossesse'); if (btn) btn.style.display = canE ? '' : 'none';
+
+  const enCours = DB.grossesses.filter(g => g.statut === 'en cours');
+  const terminees = DB.grossesses.filter(g => g.statut === 'terminée');
+  const aRisque = enCours.filter(g => g.risque).length;
+
+  const sub = $('mat-sub'); if (sub) sub.textContent = `${enCours.length} grossesse(s) suivie(s) actuellement`;
+
+  const kpis = $('mat-kpis');
+  if (kpis) kpis.innerHTML = [
+    {l:'En cours',v:enCours.length,c:'var(--o)'},
+    {l:'À risque',v:aRisque,c:'var(--r)'},
+    {l:'Terminées',v:terminees.length,c:'var(--v)'},
+  ].map(k => `<div class="gc" style="text-align:center;padding:13px;cursor:default"><div style="font-family:'Cinzel',serif;font-size:18px;font-weight:900;color:${k.c}">${k.v}</div><div style="font-size:10px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">${k.l}</div></div>`).join('');
+
+  const list = matTab === 'encours' ? enCours : terminees;
+  const el = $('mat-list');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = `<p style="color:var(--mu);text-align:center;padding:28px">Aucune grossesse ${matTab === 'encours' ? 'en cours' : 'terminée'}.</p>`; return; }
+
+  el.innerHTML = [...list].sort((a,b) => b.id - a.id).map((g, i) => {
+    const p = DB.patients.find(p => p.id === g.patientId) || {};
+    const nbCpn = (g.cpns||[]).length;
+    let ageLabel = '—';
+    if (g.statut === 'en cours') { const age = ageGestationnel(g); ageLabel = `${age.sa} SA + ${age.j}j`; }
+    return `<div class="gc slide" style="border-left:4px solid ${g.risque ? 'var(--r)' : 'var(--v)'};animation-delay:${i*.04}s;margin-bottom:12px;cursor:pointer" onclick="openGrossesseDetail(${g.id})">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          ${mkAv(p.nom||'X', p.prenom||'X', 38, p.photo)}
+          <div>
+            <div style="font-weight:700;font-size:13.5px">${esc(p.prenom||'')} ${esc(p.nom||'')}</div>
+            <div style="font-size:11px;color:var(--mu)">DDR: ${fmtDate(g.ddr)} · Terme prévu: ${fmtDate(g.termePrevu)}</div>
+            <div style="font-size:11px;color:var(--mu)">G${g.gestite}P${g.parite} · ${esc(g.groupe||'Groupe non renseigné')}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          ${g.risque ? mkBdg('⚠️ À risque', 'r') : ''}
+          <div style="font-family:'Cinzel',serif;font-size:14px;font-weight:900;color:var(--o);margin-top:4px">${g.statut === 'en cours' ? ageLabel : ('Accouchement: ' + fmtDate(g.dateAccouchement))}</div>
+          <div style="font-size:11px;color:var(--mu)">${nbCpn} CPN réalisée(s)</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openGrossesseDetail(id) {
+  cpnGrossesseId = id;
+  const g = DB.grossesses.find(g => g.id === id);
+  if (!g) return;
+  const p = DB.patients.find(p => p.id === g.patientId) || {};
+  const canE = can(CUR_USER.role, 'maternite');
+  const enCours = g.statut === 'en cours';
+
+  $('mgd-title').textContent = `${p.prenom||''} ${p.nom||''}`;
+  const age = enCours ? ageGestationnel(g) : null;
+  $('mgd-info').innerHTML = `
+    <div class="fgrid fg2" style="font-size:12.5px">
+      <div><b style="color:var(--mu)">DDR :</b> ${fmtDate(g.ddr)}</div>
+      <div><b style="color:var(--mu)">Terme prévu :</b> ${fmtDate(g.termePrevu)}</div>
+      <div><b style="color:var(--mu)">Gestité/Parité :</b> G${g.gestite}P${g.parite}</div>
+      <div><b style="color:var(--mu)">Groupe sanguin :</b> ${esc(g.groupe||'—')}</div>
+      <div><b style="color:var(--mu)">Âge gestationnel :</b> ${enCours ? `${age.sa} SA + ${age.j}j` : '—'}</div>
+      <div><b style="color:var(--mu)">Statut :</b> ${g.risque ? '⚠️ Grossesse à risque' : 'Grossesse normale'}${!enCours ? ' · ✅ Terminée le ' + fmtDate(g.dateAccouchement) : ''}</div>
+    </div>`;
+
+  const btnCpn = $('mgd-btn-cpn'); if (btnCpn) btnCpn.style.display = (canE && enCours) ? '' : 'none';
+  const btnClo = $('mgd-btn-cloturer'); if (btnClo) btnClo.style.display = (canE && enCours) ? '' : 'none';
+
+  const cpns = [...(g.cpns||[])].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const cpnList = $('mgd-cpn-list');
+  cpnList.innerHTML = cpns.length ? cpns.map((c, idx) => `
+    <div class="gc" style="margin-bottom:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:800;font-size:12.5px;color:var(--o)">CPN ${cpns.length - idx} — ${fmtDate(c.date)} (${c.sa || '?'} SA)</div>
+        ${canE && enCours ? `<button class="btn r sm" onclick="deleteCpn(${c.id})">🗑️</button>` : ''}
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--mu);margin-bottom:5px">
+        <span>⚖️ ${c.poids || '—'} kg</span>
+        <span>💓 TA: ${esc(c.ta || '—')}</span>
+        <span>📏 HU: ${c.hu || '—'} cm</span>
+        <span>👂 BCF: ${esc(c.bcf || '—')}</span>
+        <span>${c.oedemes === 'oui' ? '🔴 Œdèmes présents' : '🟢 Pas d\'œdèmes'}</span>
+      </div>
+      ${c.notes ? `<div style="font-size:12px;color:var(--txt-2);margin-top:4px">📝 ${esc(c.notes)}</div>` : ''}
+      ${c.prochain ? `<div style="font-size:11px;color:var(--v);margin-top:4px">📅 Prochain RDV: ${fmtDate(c.prochain)}</div>` : ''}
+      <div style="font-size:10px;color:var(--mu);margin-top:5px">Par ${esc(c.medecin||'—')}</div>
+    </div>`).join('') : '<p style="color:var(--mu);text-align:center;padding:20px">Aucune CPN enregistrée pour l\'instant.</p>';
+
+  showModal('modal-grossesse-detail');
+}
+
+function openCpnModal() {
+  const g = DB.grossesses.find(g => g.id === cpnGrossesseId);
+  if (!g) return;
+  const numero = (g.cpns||[]).length + 1;
+  $('mcpn-numero').textContent = `CPN ${numero}`;
+  $('mcpn-date').value = todayStr();
+  const age = ageGestationnel(g);
+  $('mcpn-sa').value = age.sa;
+  $('mcpn-poids').value = ''; $('mcpn-ta').value = ''; $('mcpn-hu').value = '';
+  $('mcpn-bcf').value = ''; $('mcpn-oedemes').value = 'non'; $('mcpn-notes').value = ''; $('mcpn-prochain').value = '';
+  $('mcpn-medecin').innerHTML = MEDECINS.map(m => `<option>${m}</option>`).join('');
+  showModal('modal-cpn');
+}
+
+async function saveCpn() {
+  const g = DB.grossesses.find(g => g.id === cpnGrossesseId);
+  if (!g) return;
+  const v = id => ($(id)||{}).value || '';
+  const date = v('mcpn-date');
+  if (!date) { alert('La date est requise.'); return; }
+  if (!g.cpns) g.cpns = [];
+  g.cpns.push({
+    id: Date.now(), date, sa: safeN(v('mcpn-sa')),
+    poids: safeN(v('mcpn-poids')), ta: v('mcpn-ta').trim(), hu: safeN(v('mcpn-hu')),
+    bcf: v('mcpn-bcf').trim(), oedemes: v('mcpn-oedemes'), medecin: v('mcpn-medecin'),
+    notes: v('mcpn-notes').trim(), prochain: v('mcpn-prochain'),
+  });
+  const p = DB.patients.find(p => p.id === g.patientId) || {};
+  await saveDB();
+  await addLog('maternite', `CPN enregistrée : ${p.prenom||''} ${p.nom||''} (${g.cpns.length}e CPN)`);
+  closeModal();
+  openGrossesseDetail(g.id); // rouvre le détail mis à jour
+  renderMaternite();
+}
+
+async function deleteCpn(cpnId) {
+  const g = DB.grossesses.find(g => g.id === cpnGrossesseId);
+  if (!g) return;
+  if (!confirm('Supprimer cette CPN ?')) return;
+  g.cpns = (g.cpns||[]).filter(c => c.id !== cpnId);
+  await saveDB();
+  openGrossesseDetail(g.id);
+  renderMaternite();
+}
+
+async function cloturerGrossesse() {
+  const g = DB.grossesses.find(g => g.id === cpnGrossesseId);
+  if (!g) return;
+  const dateAcc = prompt('Date de l\'accouchement (AAAA-MM-JJ) :', todayStr());
+  if (!dateAcc) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateAcc)) { alert('Format de date invalide.'); return; }
+  const p = DB.patients.find(p => p.id === g.patientId) || {};
+  g.statut = 'terminée';
+  g.dateAccouchement = dateAcc;
+  await saveDB();
+  await addLog('maternite', `Grossesse clôturée (accouchement) : ${p.prenom||''} ${p.nom||''}`);
+  closeModal();
+  renderMaternite();
+}
+
+/* ══════════════════════════════════════════════════════════════════
    PHARMACIE
 ══════════════════════════════════════════════════════════════════ */
 let pharmTab = 'stock';
@@ -3098,8 +3701,10 @@ function switchPharmTab(tab, btn) {
   if (btn) btn.classList.add('active');
   $('pharm-stock').style.display = tab === 'stock' ? '' : 'none';
   $('pharm-ords').style.display = tab === 'ordonnances' ? '' : 'none';
+  $('pharm-commandes').style.display = tab === 'commandes' ? '' : 'none';
   if (tab === 'stock') renderPharmStock();
-  else renderOrdonnances();
+  else if (tab === 'ordonnances') renderOrdonnances();
+  else renderCommandes();
 }
 
 function renderPharmStock() {
@@ -3109,17 +3714,26 @@ function renderPharmStock() {
   const canE = can(CUR_USER.role, 'pharmacie');
   const btn = $('btn-new-med'); if (btn) btn.style.display = canE ? '' : 'none';
   const alertes = DB.meds.filter(m => stockLow(m) || stockZero(m));
+  const alertesPeremption = DB.meds.filter(m => perimeExpire(m) || perimeProche(m));
   const valStock = DB.meds.reduce((s,m) => s + safeN(m.stock)*safeN(m.prix), 0);
 
   const sub = $('pharm-sub'); if (sub) sub.textContent = `${DB.meds.length} médicaments · Valeur: ${valStock.toLocaleString('fr-FR')} GNF`;
   const banner = $('pharm-alert-banner');
-  if (banner) { banner.style.display = alertes.length ? 'flex' : 'none'; banner.textContent = `⚠️ ${alertes.length} alerte(s) de stock`; }
+  if (banner) {
+    const total = alertes.length + alertesPeremption.length;
+    banner.style.display = total ? 'flex' : 'none';
+    const parts = [];
+    if (alertes.length) parts.push(`${alertes.length} alerte(s) de stock`);
+    if (alertesPeremption.length) parts.push(`${alertesPeremption.length} péremption(s) proche(s)/dépassée(s)`);
+    banner.textContent = `⚠️ ${parts.join(' · ')}`;
+  }
 
   const kpis = $('stock-kpis');
   if (kpis) kpis.innerHTML = [
     {l:'Médicaments',v:DB.meds.length,c:'var(--o)'},
-    {l:'Alertes',v:alertes.length,c:'var(--r)'},
+    {l:'Alertes stock',v:alertes.length,c:'var(--r)'},
     {l:'Ruptures',v:DB.meds.filter(m=>stockZero(m)).length,c:'var(--r)'},
+    {l:'Péremption',v:alertesPeremption.length,c:'var(--r)'},
     {l:'Valeur GNF',v:valStock.toLocaleString('fr-FR'),c:'var(--v)'},
   ].map(s => `<div class="gc" style="text-align:center;padding:13px;cursor:default"><div style="font-family:'Cinzel',serif;font-size:18px;font-weight:900;color:${s.c}">${s.v}</div><div style="font-size:10px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">${s.l}</div></div>`).join('');
 
@@ -3131,7 +3745,17 @@ function renderPharmStock() {
     const bad = stockZero(m), low = stockLow(m);
     const pct = Math.min(100, seuil > 0 ? (s / (seuil*2)) * 100 : (s > 0 ? 100 : 0));
     const col = bad ? 'var(--r)' : low ? 'var(--o)' : 'var(--v)';
-    return `<tr style="background:${bad?'rgba(204,0,1,.07)':low?'rgba(248,195,0,.04)':'transparent'}">
+    const jPer = joursAvantPeremption(m);
+    const perExp = perimeExpire(m), perProche = perimeProche(m);
+    let perLabel = '—', perBadge = '';
+    if (jPer !== null) {
+      const dLabel = new Date(m.datePeremption+'T00:00:00').toLocaleDateString('fr-FR');
+      perLabel = dLabel;
+      if (perExp) perBadge = mkBdg('EXPIRÉ', 'r');
+      else if (perProche) perBadge = mkBdg(`J-${jPer}`, 'o');
+    }
+    const rowBg = perExp ? 'rgba(204,0,1,.10)' : bad ? 'rgba(204,0,1,.07)' : perProche ? 'rgba(248,195,0,.06)' : low ? 'rgba(248,195,0,.04)' : 'transparent';
+    return `<tr style="background:${rowBg}">
       <td style="font-weight:800;font-size:12px;max-width:180px"><div style="display:flex;align-items:center;gap:8px">${mkThumb(m.photo,'💊',28)}<span>${esc(m.nom)}</span></div></td>
       <td style="font-size:11px;color:var(--mu)">${esc(m.cat)}</td>
       <td>
@@ -3139,6 +3763,8 @@ function renderPharmStock() {
         <div style="height:3px;background:rgba(255,255,255,.1);border-radius:2px;width:44px;margin-top:3px"><div style="height:100%;border-radius:2px;width:${pct}%;background:${col}"></div></div>
       </td>
       <td style="font-size:12px">${seuil}</td>
+      <td style="font-size:11px;color:var(--mu);font-family:monospace">${esc(m.lot||'—')}</td>
+      <td style="font-size:11px">${perLabel} ${perBadge}</td>
       <td style="font-size:12px;font-weight:700;color:var(--o)">${safeN(m.prix).toLocaleString('fr-FR')}</td>
       <td>${mkBdg(bad?'RUPTURE':low?'Bas':'OK', bad?'r':low?'o':'v')}</td>
       <td>${canE ? `<button class="btn o sm" onclick="openAjustModal(${m.id})">±</button> <button class="btn g sm" onclick="openMedModal(${m.id})">✏️</button> <button class="btn r sm" onclick="deleteMed(${m.id})">🗑️</button>` : '—'}</td>
@@ -3160,6 +3786,8 @@ function openMedModal(id = null) {
   $('mm-stock').value = m ? safeN(m.stock) : 0;
   $('mm-seuil').value = m ? safeN(m.seuil) : 20;
   $('mm-prix').value = m ? safeN(m.prix) : 0;
+  $('mm-lot').value = m ? (m.lot||'') : '';
+  $('mm-peremption').value = m ? (m.datePeremption||'') : '';
   medPhotoData = m ? (m.photo||null) : null;
   const preview = $('mm-photo-preview');
   if (preview) preview.innerHTML = medPhotoData ? `<img src="${medPhotoData}" style="width:100%;height:100%;object-fit:cover"/>` : '💊';
@@ -3176,10 +3804,11 @@ async function saveMed() {
     if (!m) return;
     m.nom = nom; m.cat = g('mm-cat'); m.stock = safeN(g('mm-stock')); m.seuil = safeN(g('mm-seuil'));
     m.prix = safeN(g('mm-prix')); m.four = g('mm-four'); m.unite = g('mm-unite')||'unité'; m.photo = medPhotoData;
+    m.lot = g('mm-lot').trim(); m.datePeremption = g('mm-peremption')||'';
     await saveDB();
     await addLog('modif', `Médicament modifié : ${nom}`);
   } else {
-    DB.meds.push({id: Date.now(), nom, cat: g('mm-cat'), stock: safeN(g('mm-stock')), seuil: safeN(g('mm-seuil')), prix: safeN(g('mm-prix')), four: g('mm-four'), unite: g('mm-unite')||'unité', photo: medPhotoData});
+    DB.meds.push({id: Date.now(), nom, cat: g('mm-cat'), stock: safeN(g('mm-stock')), seuil: safeN(g('mm-seuil')), prix: safeN(g('mm-prix')), four: g('mm-four'), unite: g('mm-unite')||'unité', photo: medPhotoData, lot: g('mm-lot').trim(), datePeremption: g('mm-peremption')||''});
     await saveDB();
     await addLog('ajout', `Médicament ajouté : ${nom}`);
   }
@@ -3380,6 +4009,195 @@ async function dispenserOrd(id) {
   await addLog('dispensation', `Ordonnance dispensée : ${p.prenom||''} ${p.nom||''}`);
   renderOrdonnances();
   updateTopbar();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BONS DE COMMANDE FOURNISSEURS
+   Structure les commandes de réapprovisionnement (au lieu du simple
+   champ texte "fournisseur" sur chaque médicament) : un bon de
+   commande regroupe plusieurs lignes de médicaments avec quantités,
+   un statut (en attente/reçue/annulée), et la réception incrémente
+   automatiquement le stock — miroir de dispenserOrd() qui, lui, le
+   décrémente.
+══════════════════════════════════════════════════════════════════ */
+function openCommandeModal(id = null) {
+  editCmdId = id;
+  $('mc-four').innerHTML = FOURNISSEURS.map(f => `<option>${f}</option>`).join('');
+  const c = id ? DB.commandes.find(c => c.id === id) : null;
+  const title = $('mc-title'); if (title) title.textContent = c ? 'Modifier le Bon de Commande' : 'Nouveau Bon de Commande';
+  if (c) {
+    if (c.statut !== 'en attente') { alert('Seul un bon de commande "en attente" peut être modifié.'); return; }
+    $('mc-four').value = c.fournisseur;
+    $('mc-date-livraison').value = c.dateLivraisonPrevue || '';
+    $('mc-note').value = c.note || '';
+    cmdLines = (c.lignes||[]).map(l => ({...l}));
+  } else {
+    $('mc-four').value = FOURNISSEURS[0];
+    $('mc-date-livraison').value = '';
+    $('mc-note').value = '';
+    cmdLines = [{medId:'', qte:1}];
+  }
+  renderCmdLines();
+  showModal('modal-cmd');
+}
+
+function addCmdLine() { cmdLines.push({medId:'', qte:1}); renderCmdLines(); }
+
+function removeCmdLine(i) { cmdLines.splice(i, 1); if (!cmdLines.length) cmdLines.push({medId:'', qte:1}); renderCmdLines(); }
+
+function cmdLineTotal() {
+  return cmdLines.reduce((s, l) => {
+    const m = DB.meds.find(m => m.id === +l.medId);
+    return s + (m ? safeN(m.prix) * safeN(l.qte) : 0);
+  }, 0);
+}
+
+function renderCmdLines() {
+  const el = $('cmd-lines');
+  if (!el) return;
+  el.innerHTML = cmdLines.map((l, i) => `<div style="display:grid;grid-template-columns:3fr 1fr auto;gap:7px;margin-bottom:8px;align-items:center">
+    <select class="fsel" style="font-size:12px;padding:7px 9px" onchange="cmdLines[${i}].medId=+this.value;updateCmdTotal()">
+      <option value="">Médicament...</option>
+      ${DB.meds.map(m => `<option value="${m.id}"${+l.medId===m.id?' selected':''}>${esc(m.nom)} (${safeN(m.prix).toLocaleString('fr-FR')} GNF)</option>`).join('')}
+    </select>
+    <input type="number" value="${l.qte}" min="1" class="finp" style="font-size:12px;padding:7px 8px" onchange="cmdLines[${i}].qte=safeN(this.value)||1;updateCmdTotal()" placeholder="Qté"/>
+    <button class="btn r sm" onclick="removeCmdLine(${i})" title="Retirer la ligne">✕</button>
+  </div>`).join('');
+  updateCmdTotal();
+}
+
+function updateCmdTotal() {
+  const el = $('mc-total');
+  if (el) el.textContent = cmdLineTotal().toLocaleString('fr-FR') + ' GNF';
+}
+
+async function saveCommande() {
+  const g = id => ($(id)||{}).value || '';
+  const lignesValides = cmdLines.filter(l => l.medId && safeN(l.qte) > 0).map(l => ({medId:+l.medId, qte:safeN(l.qte)}));
+  if (!lignesValides.length) { alert('Ajoutez au moins une ligne de médicament valide.'); return; }
+  const fournisseur = g('mc-four');
+  const dateLivraisonPrevue = g('mc-date-livraison');
+  const note = g('mc-note').trim();
+
+  if (editCmdId) {
+    const c = DB.commandes.find(c => c.id === editCmdId);
+    if (!c) return;
+    c.fournisseur = fournisseur; c.dateLivraisonPrevue = dateLivraisonPrevue; c.note = note; c.lignes = lignesValides;
+    await saveDB();
+    await addLog('modif', `Bon de commande modifié : ${fournisseur}`);
+  } else {
+    DB.commandes.push({
+      id: Date.now(), fournisseur, dateCommande: todayStr(), dateLivraisonPrevue, note,
+      lignes: lignesValides, statut: 'en attente',
+    });
+    await saveDB();
+    await addLog('ajout', `Bon de commande créé : ${fournisseur}`);
+  }
+  closeModal();
+  renderCommandes();
+}
+
+async function deleteCommande(id) {
+  const c = DB.commandes.find(c => c.id === id);
+  if (!c) return;
+  if (c.statut === 'reçue') { alert('Une commande déjà reçue ne peut pas être supprimée (le stock a déjà été mis à jour).'); return; }
+  if (!confirm('Supprimer ce bon de commande ?')) return;
+  markDeleted('commandes', id);
+  DB.commandes = DB.commandes.filter(c => c.id !== id);
+  await saveDB();
+  await addLog('suppression', `Bon de commande supprimé : ${c.fournisseur}`);
+  renderCommandes();
+}
+
+async function annulerCommande(id) {
+  const c = DB.commandes.find(c => c.id === id);
+  if (!c) return;
+  if (c.statut !== 'en attente') { alert('Seul un bon de commande "en attente" peut être annulé.'); return; }
+  if (!confirm('Annuler ce bon de commande ?')) return;
+  c.statut = 'annulée';
+  await saveDB();
+  await addLog('modif', `Bon de commande annulé : ${c.fournisseur}`);
+  renderCommandes();
+}
+
+async function receptionnerCommande(id) {
+  const c = DB.commandes.find(c => c.id === id);
+  if (!c) return;
+  if (c.statut !== 'en attente') { alert('Ce bon de commande n\'est plus en attente.'); return; }
+  const detailLignes = (c.lignes||[]).map(l => {
+    const m = DB.meds.find(m => m.id === l.medId);
+    return `${m ? esc(m.nom) : 'Médicament introuvable'} : +${safeN(l.qte)}`;
+  }).join('\n');
+  if (!confirm(`Confirmer la réception de cette commande ?\n\nLe stock sera automatiquement mis à jour :\n\n${detailLignes}`)) return;
+  (c.lignes||[]).forEach(l => {
+    const m = DB.meds.find(m => m.id === l.medId);
+    if (m) m.stock = safeN(m.stock) + safeN(l.qte);
+  });
+  c.statut = 'reçue';
+  c.dateReception = todayStr();
+  await saveDB();
+  await addLog('reception', `Commande reçue et stock mis à jour : ${c.fournisseur}`);
+  renderCommandes();
+  renderPharmStock();
+  updateTopbar();
+}
+
+function renderCommandes() {
+  if (!DB) return;
+  if (!DB.commandes) DB.commandes = [];
+  const canE = can(CUR_USER.role, 'pharmacie');
+  const btn = $('btn-new-cmd'); if (btn) btn.style.display = canE ? '' : 'none';
+
+  const enAttente = DB.commandes.filter(c => c.statut === 'en attente');
+  const recues = DB.commandes.filter(c => c.statut === 'reçue');
+  const valeurEnAttente = enAttente.reduce((s,c) => s + (c.lignes||[]).reduce((s2,l) => {
+    const m = DB.meds.find(m => m.id === l.medId);
+    return s2 + (m ? safeN(m.prix) * safeN(l.qte) : 0);
+  }, 0), 0);
+
+  const sub = $('cmd-sub'); if (sub) sub.textContent = `${DB.commandes.length} bon(s) de commande · ${enAttente.length} en attente`;
+
+  const kpis = $('cmd-kpis');
+  if (kpis) kpis.innerHTML = [
+    {l:'En attente',v:enAttente.length,c:'var(--o)'},
+    {l:'Reçues',v:recues.length,c:'var(--v)'},
+    {l:'Valeur en attente',v:valeurEnAttente.toLocaleString('fr-FR')+' GNF',c:'var(--o)'},
+  ].map(k => `<div class="gc" style="text-align:center;padding:13px;cursor:default"><div style="font-family:'Cinzel',serif;font-size:18px;font-weight:900;color:${k.c}">${k.v}</div><div style="font-size:10px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">${k.l}</div></div>`).join('');
+
+  const el = $('cmd-list');
+  if (!el) return;
+  const sorted = [...DB.commandes].sort((a,b) => b.id - a.id);
+  if (!sorted.length) { el.innerHTML = '<p style="color:var(--mu);text-align:center;padding:28px">Aucun bon de commande.</p>'; return; }
+  el.innerHTML = sorted.map((c, i) => {
+    const isAttente = c.statut === 'en attente', isRecue = c.statut === 'reçue';
+    const col = isRecue ? 'var(--v)' : isAttente ? 'var(--o)' : 'var(--mu)';
+    const total = (c.lignes||[]).reduce((s,l) => {
+      const m = DB.meds.find(m => m.id === l.medId);
+      return s + (m ? safeN(m.prix) * safeN(l.qte) : 0);
+    }, 0);
+    return `<div class="gc slide" style="border-left:4px solid ${col};animation-delay:${i*.04}s;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div style="flex:1">
+          <div style="font-family:'Cinzel',serif;font-weight:700;font-size:14px;color:var(--o)">🚚 ${esc(c.fournisseur)}</div>
+          <div style="font-size:11px;color:var(--mu);margin-top:2px">📅 Commandée le ${fmtDate(c.dateCommande)}${c.dateLivraisonPrevue ? ` · Livraison prévue: ${fmtDate(c.dateLivraisonPrevue)}` : ''}</div>
+          ${c.note ? `<div style="font-size:11px;color:var(--mu);margin-top:1px">📝 ${esc(c.note)}</div>` : ''}
+          <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+            ${(c.lignes||[]).map(l => { const m = DB.meds.find(m => m.id === l.medId); return `<span style="font-size:11px;background:rgba(255,245,200,.07);border:1px solid var(--br);border-radius:7px;padding:2px 8px">${m ? esc(m.nom) : '?'} ×${safeN(l.qte)}</span>`; }).join('')}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:150px">
+          ${mkBdg(isRecue ? '✅ Reçue' : isAttente ? '⏳ En attente' : '❌ Annulée', isRecue ? 'v' : isAttente ? 'o' : 'r')}
+          <div style="font-family:'Cinzel',serif;font-size:16px;font-weight:900;color:var(--o);text-align:right">${total.toLocaleString('fr-FR')} <span style="font-size:10px">GNF</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            ${canE && isAttente ? `<button class="btn v sm" onclick="receptionnerCommande(${c.id})">📥 Réceptionner</button>` : ''}
+            ${canE && isAttente ? `<button class="btn g sm" onclick="openCommandeModal(${c.id})">✏️</button>` : ''}
+            ${canE && isAttente ? `<button class="btn o sm" onclick="annulerCommande(${c.id})">🚫</button>` : ''}
+            ${canE && !isRecue ? `<button class="btn r sm" onclick="deleteCommande(${c.id})">🗑️</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function printOrdonnance(id) {
@@ -3898,10 +4716,198 @@ function printListeRapport(type) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   EXPORT COMPTABLE MENSUEL CONSOLIDÉ
+   Regroupe, pour un mois choisi, les recettes (consultations +
+   factures) par jour et par mode de paiement, l'encaissé vs
+   l'impayé, et les achats pharmacie (commandes fournisseurs
+   effectivement reçues ce mois-là). Sert de relevé de synthèse
+   avant une déclaration ou une revue comptable.
+══════════════════════════════════════════════════════════════════ */
+function moisComptableSelectionne() {
+  const val = ($('cpt-mois')||{}).value;
+  if (val) return val; // format 'YYYY-MM'
+  return todayStr().slice(0, 7);
+}
+
+function calcComptableMensuel(mois) {
+  // mois = 'YYYY-MM'
+  const dansLeMois = dateStr => typeof dateStr === 'string' && dateStr.slice(0, 7) === mois;
+
+  const consultsM = (DB.consults||[]).filter(c => dansLeMois(c.date));
+  const facturesM = (DB.factures||[]).filter(f => dansLeMois(f.date));
+  const commandesM = (DB.commandes||[]).filter(c => c.statut === 'reçue' && dansLeMois(c.dateReception));
+
+  const recettesConsults = consultsM.reduce((s,c) => s + safeN(c.paiement), 0);
+  const recettesFactures = facturesM.reduce((s,f) => s + safeN(f.ttc), 0);
+  const recettesTotal = recettesConsults + recettesFactures;
+
+  const encaisseConsults = consultsM.filter(c => c.statut === 'payé').reduce((s,c) => s + safeN(c.paiement), 0);
+  const encaisseFactures = facturesM.filter(f => f.statut === 'payé').reduce((s,f) => s + safeN(f.ttc), 0);
+  const encaisseTotal = encaisseConsults + encaisseFactures;
+  const impayeTotal = recettesTotal - encaisseTotal;
+
+  // Ventilation par mode de paiement (consultations + factures confondues)
+  const parMode = {};
+  consultsM.forEach(c => { const k = c.mode || 'Non précisé'; parMode[k] = (parMode[k]||0) + safeN(c.paiement); });
+  facturesM.forEach(f => { const k = f.mode || 'Non précisé'; parMode[k] = (parMode[k]||0) + safeN(f.ttc); });
+
+  // Ventilation par jour
+  const jours = {};
+  consultsM.forEach(c => { jours[c.date] = (jours[c.date]||0) + safeN(c.paiement); });
+  facturesM.forEach(f => { jours[f.date] = (jours[f.date]||0) + safeN(f.ttc); });
+  const parJour = Object.entries(jours).sort((a,b) => a[0].localeCompare(b[0]));
+
+  // Achats pharmacie du mois (commandes reçues)
+  const achatsTotal = commandesM.reduce((s,c) => s + (c.lignes||[]).reduce((s2,l) => {
+    const m = DB.meds.find(m => m.id === l.medId);
+    return s2 + (m ? safeN(m.prix) * safeN(l.qte) : 0);
+  }, 0), 0);
+
+  return {
+    mois, consultsM, facturesM, commandesM,
+    recettesConsults, recettesFactures, recettesTotal,
+    encaisseTotal, impayeTotal, parMode, parJour, achatsTotal,
+    soldeNet: encaisseTotal - achatsTotal,
+  };
+}
+
+function libelleMois(mois) {
+  const [y, m] = mois.split('-').map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
+}
+
+function exportComptableCSV() {
+  if (!DB) return;
+  const mois = moisComptableSelectionne();
+  const r = calcComptableMensuel(mois);
+
+  const rows = [];
+  rows.push({'Rubrique':'Recettes consultations','Montant GNF':r.recettesConsults});
+  rows.push({'Rubrique':'Recettes factures','Montant GNF':r.recettesFactures});
+  rows.push({'Rubrique':'Recettes totales','Montant GNF':r.recettesTotal});
+  rows.push({'Rubrique':'Encaissé','Montant GNF':r.encaisseTotal});
+  rows.push({'Rubrique':'Impayé','Montant GNF':r.impayeTotal});
+  rows.push({'Rubrique':'Achats pharmacie (commandes reçues)','Montant GNF':r.achatsTotal});
+  rows.push({'Rubrique':'Solde net (encaissé - achats)','Montant GNF':r.soldeNet});
+  rows.push({'Rubrique':'','Montant GNF':''});
+  rows.push({'Rubrique':'— Détail par mode de paiement —','Montant GNF':''});
+  Object.entries(r.parMode).forEach(([mode, montant]) => rows.push({'Rubrique':mode, 'Montant GNF':montant}));
+  rows.push({'Rubrique':'','Montant GNF':''});
+  rows.push({'Rubrique':'— Détail par jour —','Montant GNF':''});
+  r.parJour.forEach(([date, montant]) => rows.push({'Rubrique':fmtDate(date), 'Montant GNF':montant}));
+
+  downloadCSV(`export_comptable_${mois}.csv`, toCSV(rows, ['Rubrique','Montant GNF']));
+  addLog('export', `Export comptable CSV : ${libelleMois(mois)}`).catch(() => {});
+  toast('📁 Export comptable CSV téléchargé', '#009A44');
+}
+
+function printComptableMensuel() {
+  if (!DB) return;
+  const mois = moisComptableSelectionne();
+  const r = calcComptableMensuel(mois);
+  const now = new Date();
+  const periode = `Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+
+  const ligneKpi = (label, val, color) => `<div style="flex:1;min-width:140px;background:#faf8f2;border-radius:12px;padding:14px;text-align:center;border:1px solid #eee">
+    <div style="font-size:18px;font-weight:900;color:${color}">${safeN(val).toLocaleString('fr-FR')}</div>
+    <div style="font-size:9px;color:#999;font-weight:700">GNF</div>
+    <div style="font-size:11px;color:#666;font-weight:700;margin-top:4px">${label}</div>
+  </div>`;
+
+  const modeRows = Object.entries(r.parMode).map(([mode, montant]) => `<tr><td>${esc(mode)}</td><td style="text-align:right">${safeN(montant).toLocaleString('fr-FR')} GNF</td></tr>`).join('')
+    || '<tr><td colspan="2" style="text-align:center;color:#999">Aucune donnée</td></tr>';
+  const jourRows = r.parJour.map(([date, montant]) => `<tr><td>${fmtDate(date)}</td><td style="text-align:right">${safeN(montant).toLocaleString('fr-FR')} GNF</td></tr>`).join('')
+    || '<tr><td colspan="2" style="text-align:center;color:#999">Aucune donnée</td></tr>';
+
+  const w = window.open('', '_blank', 'width=880,height=1000');
+  w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/>
+  <title>Export Comptable — ${esc(libelleMois(mois))} — ${esc(CFG.title)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  ${printLibTags(['html2canvas','jspdf'])}
+  <style>${PRINT_STYLE}
+    .title{font-family:'Cinzel',serif;font-size:19px;font-weight:900;color:#CC0001;text-align:center;text-transform:uppercase;letter-spacing:1px;margin:22px 0 4px}
+    .meta{text-align:center;font-size:11px;color:#888;margin-bottom:18px}
+    .kpi-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+    .sub-title{font-family:'Cinzel',serif;font-size:13px;font-weight:800;color:#CC0001;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;border-bottom:2px solid #eee;padding-bottom:6px}
+    table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}
+    th{background:linear-gradient(90deg,#f4f1eb,#eee8dc);text-align:left;padding:9px 10px;font-size:10px;text-transform:uppercase;color:#777;font-weight:800}
+    td{padding:8px 10px;border-bottom:1px solid #eee}
+    tr:nth-child(even) td{background:#fafafa}
+    .actions{display:flex;gap:10px;justify-content:center;margin-top:20px}
+    #pdf-status{font-size:11px;color:#888;margin-top:8px;text-align:center}
+    @media print{.actions,#pdf-status{display:none!important}}
+  </style></head><body>
+  <div class="ph-page" id="rapport-content">
+  ${printHeader('🧮 Export Comptable Mensuel', null, periode)}
+  <div class="ph-body">
+  <div class="title" style="text-transform:capitalize">${esc(libelleMois(mois))}</div>
+  <div class="meta">${r.consultsM.length} consultation(s) · ${r.facturesM.length} facture(s) · ${r.commandesM.length} commande(s) reçue(s)</div>
+
+  <div class="kpi-row">
+    ${ligneKpi('Recettes totales', r.recettesTotal, '#CC0001')}
+    ${ligneKpi('Encaissé', r.encaisseTotal, '#009A44')}
+    ${ligneKpi('Impayé', r.impayeTotal, '#CC0001')}
+    ${ligneKpi('Achats pharmacie', r.achatsTotal, '#8b5cf6')}
+    ${ligneKpi('Solde net', r.soldeNet, '#F8C300')}
+  </div>
+
+  <div class="sub-title">Détail par mode de paiement</div>
+  <table><thead><tr><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${modeRows}</tbody></table>
+
+  <div class="sub-title">Détail par jour</div>
+  <table><thead><tr><th>Date</th><th style="text-align:right">Recettes</th></tr></thead><tbody>${jourRows}</tbody></table>
+  </div>
+  ${printFooter()}
+  </div>
+  <div class="actions">
+    <button onclick="window.print()" style="padding:8px 22px;background:#CC0001;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif">🖨️ Imprimer</button>
+    <button id="btn-pdf" onclick="telechargerPDF()" style="padding:8px 22px;background:#009A44;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif">📄 Télécharger PDF</button>
+  </div>
+  <div id="pdf-status"></div>
+  <script>
+    async function telechargerPDF() {
+      const btn = document.getElementById('btn-pdf');
+      const status = document.getElementById('pdf-status');
+      const el = document.getElementById('rapport-content');
+      btn.disabled = true; btn.textContent = '⏳ Génération...';
+      status.textContent = 'Génération du PDF en cours, veuillez patienter...';
+      try {
+        const canvas = await html2canvas(el, {scale: 2, backgroundColor: '#ffffff', useCORS: true});
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageW = 210, pageH = 297;
+        const imgW = pageW;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        let heightLeft = imgH, position = 0;
+        pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+        while (heightLeft > 0) {
+          position = heightLeft - imgH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+          heightLeft -= pageH;
+        }
+        pdf.save('export_comptable_${mois}.pdf');
+        status.textContent = '✅ PDF téléchargé avec succès.';
+      } catch (e) {
+        status.textContent = '❌ Erreur lors de la génération du PDF : ' + e.message;
+      } finally {
+        btn.disabled = false; btn.textContent = '📄 Télécharger PDF';
+      }
+    }
+  <\/script>
+  </body></html>`);
+  w.document.close();
+  addLog('export', `Export comptable imprimé/généré : ${libelleMois(mois)}`).catch(() => {});
+}
+
+/* ══════════════════════════════════════════════════════════════════
    RAPPORTS
 ══════════════════════════════════════════════════════════════════ */
 function renderRapports() {
   if (!DB) return;
+  const moisEl = $('cpt-mois'); if (moisEl && !moisEl.value) moisEl.value = todayStr().slice(0, 7);
   const {patients, rdv, meds, ordonnances, consults, vaccins} = DB;
   const CA = consults.reduce((s,c) => s + safeN(c.paiement), 0);
   const paye = consults.filter(c => c.statut === 'payé').reduce((s,c) => s + safeN(c.paiement), 0);
@@ -4436,7 +5442,7 @@ function closeModal() {
   // (✕ ou Annuler) laissait l'id d'édition actif : la prochaine ouverture
   // en mode "Nouveau" via le bouton ➕ pouvait alors écraser par erreur
   // l'enregistrement précédemment en cours d'édition.
-  editStaffId = null; editMedId = null; editConsultId = null; editOrdId = null;
+  editStaffId = null; editMedId = null; editConsultId = null; editOrdId = null; editCmdId = null;
 }
 
 /* ══════════════════════════════════════════════════════════════════
